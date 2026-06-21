@@ -13,6 +13,6 @@ fn main() {
         return;
     } 
 
-    println!("Hello, world!");
+    println!("Parsing...");
     parse_text(&args[1]);
 }
