@@ -5,6 +5,7 @@ use std::io::{BufRead, BufReader};
 enum Block {
     Line(String),
     Multiple(Vec<String>),
+    Colection(Vec<Block>),
 }
 
 pub fn parse_text(file_path: &String){
@@ -12,10 +13,9 @@ pub fn parse_text(file_path: &String){
         
     let reader = BufReader::new(file);
 
-    let mut result: Vec<Vec<Block>> = vec![];
+    let mut stack: Vec<Vec<Block>> = vec![vec![]];
 
     let mut current_multiple_items: Vec<String> = vec![];
-    let mut current_collection: Vec<Block> = vec![];
 
     for line in reader.lines().enumerate() {
         let line_content = line.1.expect("Failed to read line");
@@ -25,15 +25,30 @@ pub fn parse_text(file_path: &String){
         for letters in line_content.chars() {
             match letters {
                 '{' => {
+                    if !current_line.is_empty() {
+                        current_multiple_items.push(current_line.clone());
+                        current_line.clear();
+                        first_char = false;
+                    }
                     if !current_multiple_items.is_empty() { 
-                        current_collection.push(Block::Multiple(current_multiple_items.clone()));
+                        stack.last_mut().unwrap().push(Block::Multiple(current_multiple_items.clone()));
                         current_multiple_items.clear();
                     }
+                    stack.push(vec![]);
                 }
                 '}' => {
-                    if !current_multiple_items.is_empty() { 
-                        current_collection.push(Block::Multiple(current_multiple_items.clone()));
+                    if !current_line.is_empty() {
+                        current_multiple_items.push(current_line.clone());
+                        current_line.clear();
+                        first_char = false;
+                    }
+                    if !current_multiple_items.is_empty() {
+                        stack.last_mut().unwrap().push(Block::Multiple(current_multiple_items.clone()));
                         current_multiple_items.clear();
+                    }
+                    if stack.len() > 1 {
+                        let finished = stack.pop().unwrap();
+                        stack.last_mut().unwrap().push(Block::Colection(finished));
                     }
                 }
                 ';' => { current_multiple_items.push(current_line.clone()); current_line.clear() }
@@ -53,12 +68,11 @@ pub fn parse_text(file_path: &String){
     }
 
     if !current_multiple_items.is_empty() {
-        current_collection.push(Block::Multiple(current_multiple_items));
+        stack.last_mut().unwrap().push(Block::Multiple(current_multiple_items));
     }
 
+    let current_collection = stack.pop().unwrap();
     if !current_collection.is_empty() {
-        result.push(current_collection);
+        println!("{:?}", current_collection);
     }
-
-    println!("{:?}", result);
 }
