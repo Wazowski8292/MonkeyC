@@ -1,5 +1,5 @@
 use std::env;
-use MonkeyC::parser::parse_text;
+use MonkeyC::parser::{parse_text};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -14,5 +14,9 @@ fn main() {
     } 
 
     println!("Parsing...");
-    parse_text(&args[1]);
+    let parsed_text = parse_text(&args[1]);
+    match parsed_text {
+        Err(msg) => {println!("{}", msg); return;},
+        _ => {}
+    }
 }
