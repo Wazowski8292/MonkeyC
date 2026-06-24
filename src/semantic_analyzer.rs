@@ -1,38 +1,82 @@
 use crate::parser::Block;
+use std::vec::Vec;
 
-enum Sign {
-    Unsign,
-    Sign,
+#[derive(Debug, PartialEq, Clone)]
+enum TokenType {
+    IF,
+    ELSE,
+
+    INT,
+    FLOAT,
+    BOOL,
+    STRING,
+
+    PLUS,
+    MINUS,
+    EQUALS,
+    
+    NUMBER,
+    
+    UNKNOW,
 }
 
-enum IntegerSize {
-    u8(i8),
-    u16(i16),
-    u32(i32),
-    u64(i64),
+impl TokenType {
+    fn from_str(s: &str) -> Self {
+        match s {
+            "if" => TokenType::IF,
+            "else" => TokenType::ELSE,
+            "int" => TokenType::INT,
+            "float" => TokenType::FLOAT,
+            "+" => TokenType::PLUS,
+            "-" => TokenType::MINUS,
+            "=" => TokenType::EQUALS,
+
+            _ => TokenType::UNKNOW,
+        }
+    }
 }
 
-struct Integer {
-    integer_size: IntegerSize,
-    sign: Sign,
+struct Variable {
+    token_type: TokenType,
+    value: String,
 }
 
-enum FloatSize {
-    f32(f32),
-    f64(f64),
+struct Function {
+    token_type: TokenType,
+    parameters: Vec<TokenType>,
 }
 
-struct Float {
-    float_size: FloatSize,
-    sign: Sign,
+enum TableTypes {
+    VARIABLE(Variable),
+    FUNCTION(Function),
 }
 
-enum Variables {
-    Integer(Integer),
-    Float(Float)
-}
+pub fn analyze_semantically(stack: Vec<Block>) {
+    let table: Vec<TableTypes> = vec![];
 
-enum Types {
-    Functions(fn()),
-    Variable(Variables),
-}
+    for block in stack.iter() {
+        match block {
+            Block::Word(w) => {
+                let token = TokenType::from_str(w);
+                println!("{:?}", token);
+            }
+            Block::Line(words) => {
+                for w in words {
+                    let token = TokenType::from_str(w);
+                    println!("{:?}", token);
+                }
+            }
+            Block::Multiple(lines) => {
+                for line in lines {
+                    for w in line {
+                        let token = TokenType::from_str(w);
+                        println!("{:?}", token);
+                    }
+                }
+            }
+            Block::Collection(blocks) => {
+                analyze_semantically(blocks.to_vec());
+            }
+        }
+    }
+}         

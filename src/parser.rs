@@ -1,12 +1,12 @@
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Block {
     Word(String),
     Line(Vec<String>),
     Multiple(Vec<Vec<String>>),
-    Colection(Vec<Block>),
+    Collection(Vec<Block>),
 }
 
 pub fn parse_text(file_path: &String) -> Result<Vec<Block>, String> {
@@ -18,7 +18,7 @@ pub fn parse_text(file_path: &String) -> Result<Vec<Block>, String> {
     let mut current_line: Vec<String> = vec![];
     let mut current_word: String = Default::default();
 
-    let mut first_char = false;
+    let mut first_char;
 
     for (num, line) in reader.lines().enumerate() {
         let line_content = line.expect("Failed to read line");
@@ -48,7 +48,7 @@ pub fn parse_text(file_path: &String) -> Result<Vec<Block>, String> {
 
                     if stack.len() > 1 {
                         let finished = stack.pop().unwrap();
-                        stack.last_mut().unwrap().push(Block::Colection(finished));
+                        stack.last_mut().unwrap().push(Block::Collection(finished));
                     }
                 }
                 ';' => {

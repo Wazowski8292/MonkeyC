@@ -1,5 +1,6 @@
 use std::env;
 use MonkeyC::parser::{parse_text};
+use MonkeyC::semantic_analyzer::analyze_semantically;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -19,4 +20,8 @@ fn main() {
         Err(msg) => {println!("{}", msg); return;},
         _ => {}
     }
+
+    println!("Analyzing semanticly...");
+
+    analyze_semantically(parsed_text.expect("parsing failed"));
 }
