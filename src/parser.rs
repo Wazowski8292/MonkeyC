@@ -78,8 +78,6 @@ pub fn parse_text(file_path: &String) -> Result<Vec<Block>, String> {
 
     if !current_multiple_items.is_empty() {
         panic!("You have to finish the last line");
-
-        stack.last_mut().unwrap().push(Block::Multiple(current_multiple_items));
     }
 
     let current_collection = stack.pop().unwrap();
