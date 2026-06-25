@@ -53,12 +53,8 @@ impl Types for Variable {
     fn finished_definition(&self) -> bool {
         self.name.is_some()
     }
-}
 
-impl Variable {
-    fn add_argument(&mut self, argument: String) {
-        println!("argument to add {}", argument);
-
+    fn add_arguments(&mut self, argument: String) {
         if self.name == None {
             self.name = Some(argument);
         } else {
@@ -71,6 +67,7 @@ impl Variable {
 struct Function {
     token_type: TokenType,
     parameters: Vec<TokenType>,
+    name: Option<String>,
 }
 
 #[derive(Debug)]
@@ -84,6 +81,7 @@ enum TableTypes {
 trait Types {
     fn is_valid_argument(arg: TokenType) -> bool;
     fn finished_definition(&self) -> bool;
+    fn add_arguments(&mut self, argument: String);
 }
 
 impl TableTypes {
@@ -101,12 +99,20 @@ impl TableTypes {
             _ => {true},
         }
     }
+
+    fn add_arguments(&mut self, argument: String) {
+        match self {
+            TableTypes::VARIABLE(var) => { var.add_arguments(argument)}
+            _ => {}
+        }
+    }
 }
 
 struct SemanticAnalyzer {
     table: Vec<TableTypes>,
     error_messages: Vec<String>,
-    set_value: bool
+    set_value: bool,
+    last_resolved_index: Option<usize>,
 }
 
 impl SemanticAnalyzer {
@@ -115,6 +121,7 @@ impl SemanticAnalyzer {
             table: vec![],
             error_messages: vec![],
             set_value: false,
+            last_resolved_index: None,
         }
     }
 
@@ -139,6 +146,14 @@ impl SemanticAnalyzer {
         }
     } 
 
+    fn resolve(&mut self, name: String) -> Option<usize> {
+        self.table.iter().position(|entry| match entry {
+            TableTypes::VARIABLE(v) => v.name == Some(name.clone()),
+            TableTypes::FUNCTION(f) => f.name == Some(name.clone()),
+            _ => false,
+        })
+    }
+
     fn add_entry(&mut self, token: TokenType) {
         let table_type: TableTypes = TableTypes::from_token(token);
         self.table.push(table_type)
@@ -152,16 +167,28 @@ impl SemanticAnalyzer {
             return;
         }
 
+        let index = self.resolve(word.clone());
+        let is_known = token != TokenType::UNKNOW || index != None;
+
         if let Some(last_entry) = self.table.last_mut() {
             if !last_entry.finished_definition() || self.set_value {
-                match last_entry {
-                    TableTypes::VARIABLE(var) => { var.add_argument(word)}
-                    _ => {}
+                if let Some(idx) = self.last_resolved_index {
+                    self.table[idx].add_arguments(word);
+                    self.last_resolved_index = None;
+                } else {
+                    last_entry.add_arguments(word);
                 }
                 self.set_value = false;
 
             } else {
-                self.add_entry(token);
+                if token != TokenType::UNKNOW {
+                    self.add_entry(token);
+                } else if is_known {
+                    self.set_value = true;
+                    self.last_resolved_index = index;
+                } else {
+                    self.error_messages.push(format!("Undefined symbol: '{}'", word));
+                }
             }
         } else {
             if token == TokenType::UNKNOW {
