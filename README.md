@@ -35,21 +35,22 @@
 ---
 
 ## Token types
-
 > Not every token is fully implemented yet
 
-**`IF`** — `if` — Conditional branch  
-**`ELSE`** — `else` — Fallback for `if`  
-**`INT`** — `int` — Integer type  
-**`FLOAT`** — `float` — Floating-point type  
-**`BOOL`** — `bool` — Boolean type  
-**`STRING`** — `string` — String type  
-**`PLUS`** — `+` — Addition  
-**`MINUS`** — `-` — Subtraction / negation  
-**`EQUALS`** — `=` — Assignment  
-**`NUMBER`** — `0–9…` — Numeric literal  
-**`FN`** — `fn` — Function declaration  
-**`UNKNOW`** — Unrecognised token
+| Token | Lexeme | Description |
+|---|---|---|
+| `IF` | `if` | Conditional |
+| `ELSE` | `else` | Fallback for `if` |
+| `INT` | `int` | Integer |
+| `FLOAT` | `float` | Float |
+| `BOOL` | `bool` | Boolean |
+| `STRING` | `string` | String |
+| `PLUS` | `+` | Addition |
+| `MINUS` | `-` | Subtraction |
+| `EQUALS` | `=` | Assignment |
+| `NUMBER` | `0–9…` | Numeric literal |
+| `FN` | `fn` | Function |
+| `UNKNOW` | — | Unknown token |
 
 ---
 
