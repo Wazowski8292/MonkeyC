@@ -1,4 +1,8 @@
-# MonkeyC 
+<div align="center">
+
+# MonkeyC
+
+</div>
 
 ---
 
@@ -30,7 +34,8 @@
    ```
 2. **Compil the code**
     ```bash
-    cargo run **Your programm**
+    make run FILE=YourProgram.MC
+    ```
 
 ---
 

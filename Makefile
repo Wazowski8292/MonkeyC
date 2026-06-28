@@ -1,6 +1,8 @@
+FILE ?= Code.MC
+
 run:
 	clear
-	cargo run Code.MC
+	cargo run $(FILE)
 build:
 	clear
 	cargo build
