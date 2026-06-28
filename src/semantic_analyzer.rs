@@ -15,7 +15,8 @@ enum TokenType {
     MINUS,
     EQUALS,
     
-    NUMBER,
+    INTEGER_LITERAL,
+    FLOAT_LITERAL,
 
     FN,
     
@@ -39,8 +40,15 @@ impl TokenType {
 
             "fn" => TokenType::FN,
 
+            _ if s.parse::<i64>().is_ok() => TokenType::INTEGER_LITERAL,
+            _ if s.parse::<f64>().is_ok() => TokenType::FLOAT_LITERAL,
+
             _ => TokenType::UNKNOW,
         }
+    }
+
+    fn is_value(token: TokenType) -> bool {
+        token == TokenType::UNKNOW || token == TokenType::INTEGER_LITERAL || token == TokenType::FLOAT_LITERAL
     }
 }
 
@@ -61,7 +69,7 @@ impl Types for Variable {
     }
 
     fn is_valid_argument(arg: String) -> bool {
-         matches!(TokenType::from_str(&arg), TokenType::UNKNOW)
+         TokenType::is_value(TokenType::from_str(&arg))
     }
 
     fn finished_definition(&self) -> bool {
@@ -89,7 +97,7 @@ struct Function {
 }
 
 impl Types for Function {
-    fn new(token: TokenType) -> Self {
+    fn new(_: TokenType) -> Self {
         Self {
             parameters: None,
             name: None,
@@ -119,14 +127,14 @@ impl Types for Function {
 #[derive(Debug, PartialEq, Clone)]
 struct Reasingment {
     target: usize,
-    value: Option<String>,
+    parameters: Option<Vec<TableTypes>>,
 }
 
 impl Types for Reasingment {
-    fn new(token: TokenType) -> Self {
+    fn new(_: TokenType) -> Self {
         Self {
             target: 0,
-            value: None,
+            parameters: None,
         }
     }
     fn is_valid_argument(arg: String) -> bool {
@@ -142,7 +150,13 @@ impl Types for Reasingment {
             return;
         }
 
-        self.value = Some(argument.clone()); 
+        let mut table_type = TableTypes::from_token(TokenType::from_str(&argument));
+
+        if let TableTypes::VARIABLE(ref mut v) = table_type {
+            v.value = Some(argument);
+        }
+
+        self.parameters.get_or_insert_with(Vec::new).push(table_type); 
     }
 }
 
@@ -165,7 +179,7 @@ trait Types {
 impl TableTypes {
     fn from_token(token: TokenType) -> Self{
         match token {
-            TokenType::INT | TokenType::FLOAT | TokenType::STRING | TokenType::BOOL => TableTypes::VARIABLE(Variable::new(token)),
+            TokenType::INT | TokenType::FLOAT | TokenType::STRING | TokenType::BOOL | TokenType::INTEGER_LITERAL | TokenType::FLOAT_LITERAL => TableTypes::VARIABLE(Variable::new(token)),
             TokenType::FN => TableTypes::FUNCTION(Function::new(token)),
             TokenType::IF | TokenType::ELSE => TableTypes::CONDITIONAL,
             TokenType::UNKNOW => TableTypes::REASIGNMENT(Reasingment::new(TokenType::UNKNOW)),
@@ -190,6 +204,13 @@ impl TableTypes {
             _ => {}
         }
     }
+}
+
+enum ActiveTable {
+    Root,
+    FunctionTable,
+    FunctionParameters,
+    ReassignmentParameters,
 }
 
 struct SemanticAnalyzer {
@@ -243,11 +264,21 @@ impl SemanticAnalyzer {
     } 
 
     fn resolve(&mut self, name: String) -> Option<usize> {
-        self.active_table().iter().position(|entry| match entry {
+        let mut result = self.active_table().iter().position(|entry| match entry {
             TableTypes::VARIABLE(v) => v.name == Some(name.clone()),
             TableTypes::FUNCTION(f) => f.name == Some(name.clone()),
             _ => false,
-        })
+        });
+
+        if result.is_some() { return result; }
+        
+        result = self.table.iter().position(|entry| match entry {
+            TableTypes::VARIABLE(v) => v.name == Some(name.clone()),
+            TableTypes::FUNCTION(f) => f.name == Some(name.clone()),
+            _ => false,
+        });
+
+        result
     }
 
     fn add_entry(&mut self, token: TokenType) {
@@ -256,18 +287,40 @@ impl SemanticAnalyzer {
     }
 
     fn active_table(&mut self) -> &mut Vec<TableTypes> {
-        if self.defining_fn {
-            if let Some(TableTypes::FUNCTION(f)) = self.table.last_mut() {
-                if self.defining_parameters {
-                    if f.parameters.is_none() {
-                        f.parameters = Some(vec![]);
+        let which = if self.defining_fn {
+            match self.table.last() {
+                Some(TableTypes::FUNCTION(_)) => {
+                    if self.defining_parameters {
+                        ActiveTable::FunctionParameters
+                    } else {
+                        ActiveTable::FunctionTable
                     }
-                    return unsafe { &mut *(f.parameters.as_mut().unwrap() as *mut _) };
                 }
-                return unsafe { &mut *((&mut f.table) as *mut _) };
+                Some(TableTypes::REASIGNMENT(_)) => ActiveTable::ReassignmentParameters,
+                _ => ActiveTable::Root,
+            }
+        } else {
+            ActiveTable::Root
+        };
+
+        match which {
+            ActiveTable::Root => &mut self.table,
+            ActiveTable::FunctionTable => {
+                if let Some(TableTypes::FUNCTION(f)) = self.table.last_mut() {
+                    &mut f.table
+                } else { unreachable!() }
+            }
+            ActiveTable::FunctionParameters => {
+                if let Some(TableTypes::FUNCTION(f)) = self.table.last_mut() {
+                    f.parameters.get_or_insert_with(Vec::new)
+                } else { unreachable!() }
+            }
+            ActiveTable::ReassignmentParameters => {
+                if let Some(TableTypes::REASIGNMENT(r)) = self.table.last_mut() {
+                    r.parameters.get_or_insert_with(Vec::new)
+                } else { unreachable!()}
             }
         }
-        &mut self.table
     }
 
     fn tokenize_word(&mut self, word: String) {
@@ -281,22 +334,33 @@ impl SemanticAnalyzer {
         let index = self.resolve(word.clone());
         let is_known = token != TokenType::UNKNOW || index.is_some();
         let last_finished = self.active_table().last().map_or(true, |e| e.finished_definition());
-
-        if self.active_table().is_empty() {
-            if token == TokenType::UNKNOW {
-                self.error_messages.push(format!("Tried to start the programm with an unknow word {}", word));
+        let in_reasignment = matches!(self.active_table().last(), Some(TableTypes::REASIGNMENT(_)));
+        
+        if !last_finished || self.set_value || in_reasignment {
+            let new_entry = self.active_table().last_mut().unwrap();
+            new_entry.add_arguments(word);
+            if let TableTypes::REASIGNMENT(r) = new_entry && index.is_some() {
+                if let Some(last) = r.parameters.as_deref_mut().unwrap_or(&mut []).last_mut() {
+                    if let TableTypes::REASIGNMENT(v) = last {
+                        v.target = index.unwrap();
+                    }
+                }
             }
-            self.add_entry(token);
-        } else if !last_finished || self.set_value {
-            self.active_table().last_mut().unwrap().add_arguments(word);
+
             self.set_value = false;
+
         } else {
-            if token != TokenType::UNKNOW {
+            if !TokenType::is_value(token) {
                 self.add_entry(token);
             } else if is_known {
                 self.set_value = true;
 
-                self.active_table().push(TableTypes::REASIGNMENT(Reasingment {target: index.expect("Error finding the index of the value to be reasign"), value: None}));
+                let reasign = Reasingment {
+                    target: index.expect("Error finding the index of the value to be reasign"), 
+                    parameters: None,
+                };
+
+                self.active_table().push(TableTypes::REASIGNMENT(reasign));
             } else {
                 self.error_messages.push(format!("Undefined symbol: '{}'", word));
             }
