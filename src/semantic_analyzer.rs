@@ -52,7 +52,8 @@ impl TokenType {
     }
 
     fn is_value(token: TokenType) -> bool {
-        token == TokenType::UNKNOW || token == TokenType::INTEGER_LITERAL || token == TokenType::FLOAT_LITERAL
+        token == TokenType::UNKNOW || token == TokenType::INTEGER_LITERAL || token == TokenType::FLOAT_LITERAL ||
+        token ==TokenType::BOOL_LITERAL || token ==TokenType::STRING_LITERAL || token ==TokenType::CHAR_LITERAL
     }
 }
 
@@ -151,7 +152,7 @@ impl Types for Reasingment {
         }
     }
     fn is_valid_argument(arg: String) -> bool {
-         matches!(TokenType::from_str(&arg), TokenType::UNKNOW)
+        TokenType::is_value(TokenType::from_str(&arg))
     }
     
     fn finished_definition(&self) -> bool {
@@ -168,7 +169,43 @@ impl Types for Reasingment {
         if let TableTypes::VARIABLE(ref mut v) = table_type {
             v.value = Some(argument);
         }
+        self.parameters.get_or_insert_with(Vec::new).push(table_type); 
+    }
+}
 
+#[derive(Debug, PartialEq, Clone)]
+struct FunctionCall {
+    target: usize,
+    target_scope: Scope,
+    parameters: Option<Vec<TableTypes>>,
+}
+
+impl Types for FunctionCall {
+    fn new(_: TokenType) -> Self {
+        Self {
+            target: 0,
+            target_scope: Scope::Root,
+            parameters: None,
+        }
+    }
+    fn is_valid_argument(arg: String) -> bool {
+        TokenType::is_value(TokenType::from_str(&arg))
+    }
+    
+    fn finished_definition(&self) -> bool {
+        true
+    }
+
+    fn add_arguments(&mut self, argument: String) {
+        if !FunctionCall::is_valid_argument(argument.clone()) {
+            return;
+        }
+
+        let mut table_type = TableTypes::from_token(TokenType::from_str(&argument));
+
+        if let TableTypes::VARIABLE(ref mut v) = table_type {
+            v.value = Some(argument);
+        }
         self.parameters.get_or_insert_with(Vec::new).push(table_type); 
     }
 }
@@ -178,6 +215,7 @@ enum TableTypes {
     VARIABLE(Variable),
     FUNCTION(Function),
     REASIGNMENT(Reasingment),
+    FUNCTION_CALL(FunctionCall),
     ARGUMENT,
     CONDITIONAL,
 }
@@ -205,6 +243,7 @@ impl TableTypes {
             TableTypes::VARIABLE(var) => var.finished_definition(),
             TableTypes::FUNCTION(fun) => fun.finished_definition(),
             TableTypes::REASIGNMENT(asing) => asing.finished_definition(),
+            TableTypes::FUNCTION_CALL(fc) => fc.finished_definition(),
             _ => {true},
         }
     }
@@ -214,6 +253,7 @@ impl TableTypes {
             TableTypes::VARIABLE(var) => { var.add_arguments(argument)}
             TableTypes::FUNCTION(fun) => { fun.add_arguments(argument)}
             TableTypes::REASIGNMENT(reasing) => {reasing.add_arguments(argument)}
+            TableTypes::FUNCTION_CALL(fc) => {fc.add_arguments(argument)}
             _ => {}
         }
     }
@@ -224,6 +264,7 @@ enum ActiveTable {
     FunctionTable,
     FunctionParameters,
     ReassignmentParameters,
+    FunctionCallParameters,
 }
 
 struct SemanticAnalyzer {
@@ -276,42 +317,41 @@ impl SemanticAnalyzer {
         }
     } 
 
-    fn resolve(&mut self, name: String) -> Option<(usize, Scope)> {
-        let local_result = self.active_table().iter().position(|entry| match entry {
-            TableTypes::VARIABLE(v) => v.name == Some(name.clone()),
-            TableTypes::FUNCTION(f) => f.name == Some(name.clone()),
-            _ => false,
+    fn resolve(&mut self, name: String) -> Option<(usize, Scope, bool)> {
+        let local_result = self.active_table().iter().enumerate().find_map(|(idx, entry)| match entry {
+            TableTypes::VARIABLE(v) if v.name == Some(name.clone()) => Some((idx, false)),
+            TableTypes::FUNCTION(f) if f.name == Some(name.clone()) => Some((idx, true)),
+            _ => None,
         });
 
-        if let Some(idx) = local_result {
+        if let Some((idx, is_func)) = local_result {
             if !self.defining_fn {
-                return Some((idx, Scope::Root));
+                return Some((idx, Scope::Root, is_func));
             }
-            return Some((idx, Scope::Function));
+            return Some((idx, Scope::Function, is_func));
         }
 
-        // Search function parameters if we're inside a function
         if self.defining_fn {
             if let Some(TableTypes::FUNCTION(f)) = self.table.last() {
                 if let Some(params) = &f.parameters {
-                    let param_result = params.iter().position(|entry| match entry {
-                        TableTypes::VARIABLE(v) => v.name == Some(name.clone()),
-                        _ => false,
+                    let param_result = params.iter().enumerate().find_map(|(idx, entry)| match entry {
+                        TableTypes::VARIABLE(v) if v.name == Some(name.clone()) => Some((idx, false)),
+                        _ => None,
                     });
-                    if let Some(idx) = param_result {
-                        return Some((idx, Scope::Parameter));
+                    if let Some((idx, is_func)) = param_result {
+                        return Some((idx, Scope::Parameter, is_func));
                     }
                 }
             }
         }
         
-        let root_result = self.table.iter().position(|entry| match entry {
-            TableTypes::VARIABLE(v) => v.name == Some(name.clone()),
-            TableTypes::FUNCTION(f) => f.name == Some(name.clone()),
-            _ => false,
+        let root_result = self.table.iter().enumerate().find_map(|(idx, entry)| match entry {
+            TableTypes::VARIABLE(v) if v.name == Some(name.clone()) => Some((idx, false)),
+            TableTypes::FUNCTION(f) if f.name == Some(name.clone()) => Some((idx, true)),
+            _ => None,
         });
 
-        root_result.map(|idx| (idx, Scope::Root))
+        root_result.map(|(idx, is_func)| (idx, Scope::Root, is_func))
     }
 
     fn add_entry(&mut self, token: TokenType) {
@@ -330,6 +370,7 @@ impl SemanticAnalyzer {
                     }
                 }
                 Some(TableTypes::REASIGNMENT(_)) => ActiveTable::ReassignmentParameters,
+                Some(TableTypes::FUNCTION_CALL(_)) => ActiveTable::FunctionCallParameters,
                 _ => ActiveTable::Root,
             }
         } else {
@@ -353,10 +394,16 @@ impl SemanticAnalyzer {
                     r.parameters.get_or_insert_with(Vec::new)
                 } else { unreachable!()}
             }
+            ActiveTable::FunctionCallParameters => {
+                if let Some(TableTypes::FUNCTION_CALL(r)) = self.table.last_mut() {
+                    r.parameters.get_or_insert_with(Vec::new)
+                } else { unreachable!()}
+            }
         }
     }
 
-    fn tokenize_word(&mut self, word: Word) {
+    fn tokenize_word(&mut self, mut word: Word) {
+        word.word = word.word.trim_end_matches(',').to_string();
         let token = TokenType::from_str(&word.word);
 
         if token == TokenType::EQUALS {
@@ -366,36 +413,101 @@ impl SemanticAnalyzer {
 
         let index = self.resolve(word.word.clone());
         let last_finished = self.active_table().last().map_or(true, |e| e.finished_definition());
-        let in_reasignment = matches!(self.active_table().last(), Some(TableTypes::REASIGNMENT(_)));
         
-        if !last_finished || self.set_value || in_reasignment {
-            self.handle_argument(word, token, index, in_reasignment);
+        let mut last_completed = false;
+        let mut is_fc = false;
+        let mut fc_target = 0;
+        let mut fc_target_scope = Scope::Root;
+        let mut fc_params_len = 0;
+
+        match self.active_table().last() {
+            Some(TableTypes::REASIGNMENT(r)) => {
+                last_completed = r.parameters.as_ref().map_or(0, |p| p.len()) >= 1;
+            }
+            Some(TableTypes::FUNCTION_CALL(fc)) => {
+                is_fc = true;
+                fc_target = fc.target;
+                fc_target_scope = fc.target_scope;
+                fc_params_len = fc.parameters.as_ref().map_or(0, |p| p.len());
+            }
+            _ => {}
+        }
+
+        let mut expected_fc_params = 0;
+        if is_fc {
+            let expected_params = match fc_target_scope {
+                Scope::Root =>{ 
+                    if let Some(TableTypes::FUNCTION(f)) = self.table.get(fc_target) {
+                        f.parameters.as_ref().map_or(0, |p| p.len())
+                    } else { 0 }
+                },
+                Scope::Function => {
+                    if let Some(TableTypes::FUNCTION(f)) = self.table.last() {
+                        if let Some(TableTypes::FUNCTION(inner)) = f.table.get(fc_target) {
+                            inner.parameters.as_ref().map_or(0, |p| p.len())
+                        } else { 0 }
+                    } else { 0 }
+                },
+                _ => 0,
+            };
+            expected_fc_params = expected_params;
+            last_completed = false;
+        }
+
+        let in_reasignment = matches!(self.active_table().last(), Some(TableTypes::REASIGNMENT(_)));
+        let in_function_call = matches!(self.active_table().last(), Some(TableTypes::FUNCTION_CALL(_)));
+        
+        let in_call_or_reasign = (in_reasignment || in_function_call) && !last_completed;
+        
+        if !last_finished || self.set_value || in_call_or_reasign {
+            self.handle_argument(word, token, index, in_reasignment, in_function_call, expected_fc_params, fc_params_len);
         } else {
             self.handle_new_entry(word, token, index);
         }
     }
 
-    fn handle_argument(&mut self, word: Word, token: TokenType, index: Option<(usize, Scope)>, in_reasignment: bool) {
-        if in_reasignment && token == TokenType::UNKNOW && index.is_none() {
-            self.error_messages.push(format!("Undefined symbol: {}; Line: {}:{}", word.word, word.line.unwrap_or(0), word.char_num.unwrap_or(0)));
-        } else {
-            let new_entry = self.active_table().last_mut().unwrap();
-            new_entry.add_arguments(word.word);
-            if let TableTypes::REASIGNMENT(r) = new_entry && index.is_some() {
-                if let Some(last) = r.parameters.as_deref_mut().unwrap_or(&mut []).last_mut() {
-                    if let TableTypes::REASIGNMENT(v) = last {
-                        let (idx, scope) = index.unwrap();
+    fn handle_argument(&mut self, word: Word, token: TokenType, index: Option<(usize, Scope, bool)>, in_reasignment: bool, in_function_call: bool, expected_fc_params: usize, fc_params_len: usize) {
+        self.set_value = false;
+        let in_call_or_reasign = in_reasignment || in_function_call;
+
+        if in_function_call && fc_params_len >= expected_fc_params {
+            self.error_messages.push(format!("Too many arguments for function call. Expected {}, got {}; Line: {}; Char pos: {}", expected_fc_params, fc_params_len + 1, word.line.unwrap_or(0), word.char_num.unwrap_or(0)));
+            return;
+        }
+
+        if in_call_or_reasign && token == TokenType::UNKNOW && index.is_none() {
+            self.error_messages.push(format!("Undefined symbol: {}; Line: {}; Char pos: {}", word.word, word.line.unwrap_or(0), word.char_num.unwrap_or(0)));
+            return;
+        }
+
+        let new_entry = self.active_table().last_mut().unwrap();
+        new_entry.add_arguments(word.word.clone());
+        
+        if let Some((idx, scope, is_func)) = index {
+            let last_param = match new_entry {
+                TableTypes::REASIGNMENT(r) => r.parameters.as_mut().and_then(|p| p.last_mut()),
+                TableTypes::FUNCTION_CALL(fc) => fc.parameters.as_mut().and_then(|p| p.last_mut()),
+                _ => None,
+            };
+
+            if let Some(last) = last_param {
+                if let TableTypes::REASIGNMENT(v) = last {
+                    if is_func {
+                        *last = TableTypes::FUNCTION_CALL(FunctionCall {
+                            target: idx,
+                            target_scope: scope,
+                            parameters: None,
+                        });
+                    } else {
                         v.target = idx;
                         v.target_scope = scope;
                     }
                 }
             }
         }
-
-        self.set_value = false;
     }
 
-    fn handle_new_entry(&mut self, word: Word, token: TokenType, index: Option<(usize, Scope)>) {
+    fn handle_new_entry(&mut self, word: Word, token: TokenType, index: Option<(usize, Scope, bool)>) {
         let is_known = token != TokenType::UNKNOW || index.is_some();
 
         if !TokenType::is_value(token) {
@@ -403,14 +515,23 @@ impl SemanticAnalyzer {
         } else if is_known {
             self.set_value = true;
 
-            let (idx, scope) = index.expect("Error finding the index of the value to be reasign");
-            let reasign = Reasingment {
-                target: idx,
-                target_scope: scope,
-                parameters: None,
-            };
-
-            self.active_table().push(TableTypes::REASIGNMENT(reasign));
+            let (idx, scope, is_func) = index.expect("Error finding the index of the value to be reasign");
+            
+            if is_func {
+                let func_call = FunctionCall {
+                    target: idx,
+                    target_scope: scope,
+                    parameters: None,
+                };
+                self.active_table().push(TableTypes::FUNCTION_CALL(func_call));
+            } else {
+                let reasign = Reasingment {
+                    target: idx,
+                    target_scope: scope,
+                    parameters: None,
+                };
+                self.active_table().push(TableTypes::REASIGNMENT(reasign));
+            }
         } else {
             self.error_messages.push(format!("Undefined symbol: {}; Line: {}:{}", word.word, word.line.unwrap_or(0), word.char_num.unwrap_or(0)));
         }
