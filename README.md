@@ -53,7 +53,8 @@
 | `PLUS` | `+` | Addition |
 | `MINUS` | `-` | Subtraction |
 | `EQUALS` | `=` | Assignment |
-| `NUMBER` | `0–9…` | Numeric literal |
+| `INTEGER_LITERAL` | `0–9…` | Interger literal |
+| `FLOAT_LITERAL` | `0–9.0…` | Floating point integers literal |
 | `FN` | `fn` | Function |
 | `UNKNOW` | — | Unknown token |
 

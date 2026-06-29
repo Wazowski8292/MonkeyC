@@ -9,6 +9,7 @@ enum TokenType {
     INT,
     FLOAT,
     BOOL,
+    CHAR,
     STRING,
 
     PLUS,
@@ -17,6 +18,9 @@ enum TokenType {
     
     INTEGER_LITERAL,
     FLOAT_LITERAL,
+    CHAR_LITERAL,
+    STRING_LITERAL,
+    BOOL_LITERAL,
 
     FN,
     
@@ -124,9 +128,17 @@ impl Types for Function {
     }
 }
 
+#[derive(Debug, PartialEq, Clone, Copy)]
+enum Scope {
+    Root,
+    Function,
+    Parameter,
+}
+
 #[derive(Debug, PartialEq, Clone)]
 struct Reasingment {
     target: usize,
+    target_scope: Scope,
     parameters: Option<Vec<TableTypes>>,
 }
 
@@ -134,6 +146,7 @@ impl Types for Reasingment {
     fn new(_: TokenType) -> Self {
         Self {
             target: 0,
+            target_scope: Scope::Root,
             parameters: None,
         }
     }
@@ -263,22 +276,42 @@ impl SemanticAnalyzer {
         }
     } 
 
-    fn resolve(&mut self, name: String) -> Option<usize> {
-        let mut result = self.active_table().iter().position(|entry| match entry {
+    fn resolve(&mut self, name: String) -> Option<(usize, Scope)> {
+        let local_result = self.active_table().iter().position(|entry| match entry {
             TableTypes::VARIABLE(v) => v.name == Some(name.clone()),
             TableTypes::FUNCTION(f) => f.name == Some(name.clone()),
             _ => false,
         });
 
-        if result.is_some() { return result; }
+        if let Some(idx) = local_result {
+            if !self.defining_fn {
+                return Some((idx, Scope::Root));
+            }
+            return Some((idx, Scope::Function));
+        }
+
+        // Search function parameters if we're inside a function
+        if self.defining_fn {
+            if let Some(TableTypes::FUNCTION(f)) = self.table.last() {
+                if let Some(params) = &f.parameters {
+                    let param_result = params.iter().position(|entry| match entry {
+                        TableTypes::VARIABLE(v) => v.name == Some(name.clone()),
+                        _ => false,
+                    });
+                    if let Some(idx) = param_result {
+                        return Some((idx, Scope::Parameter));
+                    }
+                }
+            }
+        }
         
-        result = self.table.iter().position(|entry| match entry {
+        let root_result = self.table.iter().position(|entry| match entry {
             TableTypes::VARIABLE(v) => v.name == Some(name.clone()),
             TableTypes::FUNCTION(f) => f.name == Some(name.clone()),
             _ => false,
         });
 
-        result
+        root_result.map(|idx| (idx, Scope::Root))
     }
 
     fn add_entry(&mut self, token: TokenType) {
@@ -332,38 +365,54 @@ impl SemanticAnalyzer {
         }
 
         let index = self.resolve(word.clone());
-        let is_known = token != TokenType::UNKNOW || index.is_some();
         let last_finished = self.active_table().last().map_or(true, |e| e.finished_definition());
         let in_reasignment = matches!(self.active_table().last(), Some(TableTypes::REASIGNMENT(_)));
         
         if !last_finished || self.set_value || in_reasignment {
+            self.handle_argument(word, token, index, in_reasignment);
+        } else {
+            self.handle_new_entry(word, token, index);
+        }
+    }
+
+    fn handle_argument(&mut self, word: String, token: TokenType, index: Option<(usize, Scope)>, in_reasignment: bool) {
+        if in_reasignment && token == TokenType::UNKNOW && index.is_none() {
+            self.error_messages.push(format!("Undefined symbol: '{}'", word));
+        } else {
             let new_entry = self.active_table().last_mut().unwrap();
             new_entry.add_arguments(word);
             if let TableTypes::REASIGNMENT(r) = new_entry && index.is_some() {
                 if let Some(last) = r.parameters.as_deref_mut().unwrap_or(&mut []).last_mut() {
                     if let TableTypes::REASIGNMENT(v) = last {
-                        v.target = index.unwrap();
+                        let (idx, scope) = index.unwrap();
+                        v.target = idx;
+                        v.target_scope = scope;
                     }
                 }
             }
+        }
 
-            self.set_value = false;
+        self.set_value = false;
+    }
 
+    fn handle_new_entry(&mut self, word: String, token: TokenType, index: Option<(usize, Scope)>) {
+        let is_known = token != TokenType::UNKNOW || index.is_some();
+
+        if !TokenType::is_value(token) {
+            self.add_entry(token);
+        } else if is_known {
+            self.set_value = true;
+
+            let (idx, scope) = index.expect("Error finding the index of the value to be reasign");
+            let reasign = Reasingment {
+                target: idx,
+                target_scope: scope,
+                parameters: None,
+            };
+
+            self.active_table().push(TableTypes::REASIGNMENT(reasign));
         } else {
-            if !TokenType::is_value(token) {
-                self.add_entry(token);
-            } else if is_known {
-                self.set_value = true;
-
-                let reasign = Reasingment {
-                    target: index.expect("Error finding the index of the value to be reasign"), 
-                    parameters: None,
-                };
-
-                self.active_table().push(TableTypes::REASIGNMENT(reasign));
-            } else {
-                self.error_messages.push(format!("Undefined symbol: '{}'", word));
-            }
+            self.error_messages.push(format!("Undefined symbol: '{}'", word));
         }
     }
 
