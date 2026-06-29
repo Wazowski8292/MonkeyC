@@ -1,4 +1,4 @@
-use crate::parser::Block;
+use crate::parser::{Block, Word};
 use std::vec::Vec;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -249,7 +249,7 @@ impl SemanticAnalyzer {
         for block in stack.iter() {
             match block {
                 Block::Word(word) => {
-                    self.tokenize_word(word.to_string());
+                    self.tokenize_word(word.clone());
                 }
                 Block::Line(words) => {
                     self.tokenize_line(words);
@@ -356,15 +356,15 @@ impl SemanticAnalyzer {
         }
     }
 
-    fn tokenize_word(&mut self, word: String) {
-        let token = TokenType::from_str(&word);
+    fn tokenize_word(&mut self, word: Word) {
+        let token = TokenType::from_str(&word.word);
 
         if token == TokenType::EQUALS {
             self.set_value = true;
             return;
         }
 
-        let index = self.resolve(word.clone());
+        let index = self.resolve(word.word.clone());
         let last_finished = self.active_table().last().map_or(true, |e| e.finished_definition());
         let in_reasignment = matches!(self.active_table().last(), Some(TableTypes::REASIGNMENT(_)));
         
@@ -375,12 +375,12 @@ impl SemanticAnalyzer {
         }
     }
 
-    fn handle_argument(&mut self, word: String, token: TokenType, index: Option<(usize, Scope)>, in_reasignment: bool) {
+    fn handle_argument(&mut self, word: Word, token: TokenType, index: Option<(usize, Scope)>, in_reasignment: bool) {
         if in_reasignment && token == TokenType::UNKNOW && index.is_none() {
-            self.error_messages.push(format!("Undefined symbol: '{}'", word));
+            self.error_messages.push(format!("Undefined symbol: {}; Line: {}:{}", word.word, word.line.unwrap_or(0), word.char_num.unwrap_or(0)));
         } else {
             let new_entry = self.active_table().last_mut().unwrap();
-            new_entry.add_arguments(word);
+            new_entry.add_arguments(word.word);
             if let TableTypes::REASIGNMENT(r) = new_entry && index.is_some() {
                 if let Some(last) = r.parameters.as_deref_mut().unwrap_or(&mut []).last_mut() {
                     if let TableTypes::REASIGNMENT(v) = last {
@@ -395,7 +395,7 @@ impl SemanticAnalyzer {
         self.set_value = false;
     }
 
-    fn handle_new_entry(&mut self, word: String, token: TokenType, index: Option<(usize, Scope)>) {
+    fn handle_new_entry(&mut self, word: Word, token: TokenType, index: Option<(usize, Scope)>) {
         let is_known = token != TokenType::UNKNOW || index.is_some();
 
         if !TokenType::is_value(token) {
@@ -412,13 +412,13 @@ impl SemanticAnalyzer {
 
             self.active_table().push(TableTypes::REASIGNMENT(reasign));
         } else {
-            self.error_messages.push(format!("Undefined symbol: '{}'", word));
+            self.error_messages.push(format!("Undefined symbol: {}; Line: {}:{}", word.word, word.line.unwrap_or(0), word.char_num.unwrap_or(0)));
         }
     }
 
-    fn tokenize_line(&mut self, line: &Vec<String>) {
+    fn tokenize_line(&mut self, line: &Vec<Word>) {
         for word in line {
-            self.tokenize_word(word.to_string());
+            self.tokenize_word(word.clone());
         }
     }
 }

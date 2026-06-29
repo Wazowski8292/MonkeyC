@@ -2,10 +2,33 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 
 #[derive(Debug, Clone)]
+pub struct Word {
+    pub word: String,
+    pub line: Option<usize>,
+    pub char_num: Option<usize>,
+}
+
+impl Word {
+    pub fn new() -> Self {
+        Self {
+            word: String::default(),
+            line: None,
+            char_num: None,   
+        }
+    }
+    
+    fn clear(&mut self) {
+        self.word.clear();
+        self.line = None;
+        self.char_num = None;
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum Block {
-    Word(String),
-    Line(Vec<String>),
-    Multiple(Vec<Vec<String>>),
+    Word(Word),
+    Line(Vec<Word>),
+    Multiple(Vec<Vec<Word>>),
     Collection(Vec<Block>),
 }
 
@@ -14,9 +37,9 @@ pub fn parse_text(file_path: &String) -> Result<Vec<Block>, String> {
     let reader = BufReader::new(file);
 
     let mut stack: Vec<Vec<Block>> = vec![vec![]];
-    let mut current_multiple_items: Vec<Vec<String>> = vec![];
-    let mut current_line: Vec<String> = vec![];
-    let mut current_word: String = Default::default();
+    let mut current_multiple_items: Vec<Vec<Word>> = vec![];
+    let mut current_line: Vec<Word> = vec![];
+    let mut current_word: Word = Word::new();
 
     let mut first_char;
 
@@ -55,19 +78,15 @@ pub fn parse_text(file_path: &String) -> Result<Vec<Block>, String> {
                     skip = false;
                 }
                 ';' => {
-                    if !current_word.is_empty() {
-                        current_line.push(current_word.clone());
-                        current_word.clear();
-                    }
-                    current_multiple_items.push(current_line.clone());
-                    current_line.clear();
+                    add_last_word(&mut current_word, &mut current_line);
+                    add_last_line(&mut current_line, &mut current_multiple_items, &mut first_char);
+
                     first_char = false;
                     skip = false;
                 }
                 '\t' | ' ' => {
                     if first_char {
-                        current_line.push(current_word.clone());
-                        current_word.clear();
+                        add_last_word(&mut current_word, &mut current_line);
                     }
                     skip = false;
                 }
@@ -78,22 +97,22 @@ pub fn parse_text(file_path: &String) -> Result<Vec<Block>, String> {
                     skip = true;
                 }
                 _ => { 
-                    current_word.push(letters); 
+                    current_word.word.push(letters);
+                    if !current_word.line.is_some() {
+                        current_word.line = Some(num);
+                    }
+                    if !current_word.char_num.is_some() {
+                        current_word.char_num = Some(char_pos);
+                    }
+
                     first_char = true;
                     skip = false;
                 }
             }
         }
 
-        if !current_word.is_empty() {
-            current_line.push(current_word.clone());
-            current_word.clear();
-        }
-
-        if !current_line.is_empty() {
-            current_multiple_items.push(current_line.clone());
-            current_line.clear();
-        }
+        add_last_word(&mut current_word, &mut current_line);
+        add_last_line(&mut current_line, &mut current_multiple_items, &mut first_char);
     }
 
     if !current_multiple_items.is_empty() {
@@ -107,12 +126,29 @@ pub fn parse_text(file_path: &String) -> Result<Vec<Block>, String> {
     Ok(current_collection)
 }
 
-fn add_last_block(first_char: &mut bool, current_word: &mut String, current_line: &mut Vec<String>, 
-    current_multiple_items: &mut Vec<Vec<String>>, stack: &mut Vec<Vec<Block>>, line: usize, chars: usize, new_line: bool) -> Result<(), String>{
+
+
+fn add_last_word(current_word: &mut Word, current_line: &mut Vec<Word>) {
+    if !current_word.word.is_empty() {
+        current_line.push(current_word.clone());
+        current_word.clear();
+    }
+}
+
+fn add_last_line(current_line: &mut Vec<Word>, current_multiple_items: &mut Vec<Vec<Word>>, first_char: &mut bool) {
+    if !current_line.is_empty() {
+        current_multiple_items.push(current_line.clone());
+        current_line.clear();
+        *first_char = false;
+    }
+}
+
+fn add_last_block(first_char: &mut bool, current_word: &mut Word, current_line: &mut Vec<Word>, 
+    current_multiple_items: &mut Vec<Vec<Word>>, stack: &mut Vec<Vec<Block>>, line: usize, chars: usize, new_line: bool) -> Result<(), String>{
         
-    if !current_word.is_empty() {
+    if !current_word.word.is_empty() {
         if new_line {
-            current_line.push(current_word.to_string());
+            current_line.push(current_word.clone());
             current_word.clear();
             *first_char = false;
         } else {
@@ -120,11 +156,7 @@ fn add_last_block(first_char: &mut bool, current_word: &mut String, current_line
         }
     }
     
-    if !current_line.is_empty() {
-        current_multiple_items.push(current_line.clone());
-        current_line.clear();
-        *first_char = false;
-    }
+    add_last_line(current_line, current_multiple_items, first_char);
     
     if !current_multiple_items.is_empty() { 
         stack.last_mut().unwrap().push(Block::Multiple(current_multiple_items.clone()));
