@@ -66,9 +66,11 @@
 - [x] Make semantic analyzer detect var defenitions
 - [x] Make semantic analyzer detect funtion defenitions
 - [x] Make semantic analyzer reasing and call var defenitions
-- [ ] Make function parameter actually do something
+- [x] Need to fix a problem with finding fn definitions
+- [ ] Make function parameter actually do something(do checks)
+    -> [x] Do parameter amount checks
+    -> [ ] Do parameter type checks
 - [ ] Add conditionals
-- [ ] Need to fix a problem with finding fn definitions
 
 ---
 

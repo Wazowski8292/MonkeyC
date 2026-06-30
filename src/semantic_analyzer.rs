@@ -1,8 +1,9 @@
 use crate::parser::{Block, Word};
+use crate::variable_types::{Variable, Function, Reasingment, FunctionCall, Types};
 use std::vec::Vec;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
-enum TokenType {
+pub enum TokenType {
     If,
     Else,
 
@@ -28,7 +29,7 @@ enum TokenType {
 }
 
 impl TokenType {
-    fn from_str(s: &str) -> Self {
+    pub fn from_str(s: &str) -> Self {
         match s {
             "if" => TokenType::If,
             "else" => TokenType::Else,
@@ -51,167 +52,21 @@ impl TokenType {
         }
     }
 
-    fn is_value(token: TokenType) -> bool {
+    pub fn is_value(token: TokenType) -> bool {
         token == TokenType::Unknow || token == TokenType::IntegerLiteral || token == TokenType::FloatLiteral ||
         token ==TokenType::BoolLiteral || token ==TokenType::StringLiteral || token ==TokenType::CharLiteral
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
-struct Variable {
-    token_type: TokenType,
-    value: Option<String>,
-    name: Option<String>,
-}
-
-impl Types for Variable {
-    fn new(token: TokenType) -> Self {
-        Self {
-            token_type: token,
-            value: None,
-            name: None,
-        }
-    }
-
-    fn is_valid_argument(arg: String) -> bool {
-         TokenType::is_value(TokenType::from_str(&arg))
-    }
-
-    fn finished_definition(&self) -> bool {
-        self.name.is_some()
-    }
-
-    fn add_arguments(&mut self, argument: String) {
-        if !Variable::is_valid_argument(argument.clone()) {
-            return;
-        }
-
-        if self.name == None {
-            self.name = Some(argument);
-        } else {
-            self.value = Some(argument);
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Clone)]
-struct Function {
-    parameters: Option<Vec<TableTypes>>,
-    name: Option<String>,
-    table: Vec<TableTypes>,
-}
-
-impl Types for Function {
-    fn new(_: TokenType) -> Self {
-        Self {
-            parameters: None,
-            name: None,
-            table: vec![],
-        }
-    }
-
-    fn is_valid_argument(arg: String) -> bool {
-         matches!(TokenType::from_str(&arg), TokenType::Unknow)
-    }
-
-    fn finished_definition(&self) -> bool {
-        self.name.is_some()
-    }
-
-    fn add_arguments(&mut self, argument: String) {
-        if !Function::is_valid_argument(argument.clone()) {
-            return;
-        }
-
-        if self.name == None {
-            self.name = Some(argument.clone());
-        }
-    }
-}
-
 #[derive(Debug, PartialEq, Clone, Copy)]
-enum Scope {
+pub enum Scope {
     Root,
     Function,
     Parameter,
 }
 
 #[derive(Debug, PartialEq, Clone)]
-struct Reasingment {
-    target: usize,
-    target_scope: Scope,
-    parameters: Option<Vec<TableTypes>>,
-}
-
-impl Types for Reasingment {
-    fn new(_: TokenType) -> Self {
-        Self {
-            target: 0,
-            target_scope: Scope::Root,
-            parameters: None,
-        }
-    }
-    fn is_valid_argument(arg: String) -> bool {
-        TokenType::is_value(TokenType::from_str(&arg))
-    }
-    
-    fn finished_definition(&self) -> bool {
-        true
-    }
-
-    fn add_arguments(&mut self, argument: String) {
-        if !Reasingment::is_valid_argument(argument.clone()) {
-            return;
-        }
-
-        let mut table_type = TableTypes::from_token(TokenType::from_str(&argument));
-
-        if let TableTypes::Variable(ref mut v) = table_type {
-            v.value = Some(argument);
-        }
-        self.parameters.get_or_insert_with(Vec::new).push(table_type); 
-    }
-}
-
-#[derive(Debug, PartialEq, Clone)]
-struct FunctionCall {
-    target: usize,
-    target_scope: Scope,
-    parameters: Option<Vec<TableTypes>>,
-}
-
-impl Types for FunctionCall {
-    fn new(_: TokenType) -> Self {
-        Self {
-            target: 0,
-            target_scope: Scope::Root,
-            parameters: None,
-        }
-    }
-    fn is_valid_argument(arg: String) -> bool {
-        TokenType::is_value(TokenType::from_str(&arg))
-    }
-    
-    fn finished_definition(&self) -> bool {
-        true
-    }
-
-    fn add_arguments(&mut self, argument: String) {
-        if !FunctionCall::is_valid_argument(argument.clone()) {
-            return;
-        }
-
-        let mut table_type = TableTypes::from_token(TokenType::from_str(&argument));
-
-        if let TableTypes::Variable(ref mut v) = table_type {
-            v.value = Some(argument);
-        }
-        self.parameters.get_or_insert_with(Vec::new).push(table_type); 
-    }
-}
-
-#[derive(Debug, PartialEq, Clone)]
-enum TableTypes {
+pub enum TableTypes {
     Variable(Variable),
     Function(Function),
     Reasingment(Reasingment),
@@ -220,15 +75,8 @@ enum TableTypes {
     Conditional,
 }
 
-trait Types {
-    fn new(token: TokenType) -> Self;
-    fn is_valid_argument(arg: String) -> bool;
-    fn finished_definition(&self) -> bool;
-    fn add_arguments(&mut self, argument: String);
-}
-
 impl TableTypes {
-    fn from_token(token: TokenType) -> Self{
+    pub fn from_token(token: TokenType) -> Self{
         match token {
             TokenType::Int | TokenType::Float | TokenType::String | TokenType::Bool | TokenType::IntegerLiteral | TokenType::FloatLiteral => TableTypes::Variable(Variable::new(token)),
             TokenType::FnLiteral => TableTypes::Function(Function::new(token)),
