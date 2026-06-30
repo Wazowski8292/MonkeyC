@@ -30,6 +30,7 @@ pub enum Block {
     Line(Vec<Word>),
     Multiple(Vec<Vec<Word>>),
     Collection(Vec<Block>),
+    Parameter(Vec<Block>),
 }
 
 pub fn parse_text(file_path: &String) -> Result<Vec<Block>, String> {
@@ -73,7 +74,11 @@ pub fn parse_text(file_path: &String) -> Result<Vec<Block>, String> {
 
                     if stack.len() > 1 {
                         let finished = stack.pop().unwrap();
-                        stack.last_mut().unwrap().push(Block::Collection(finished));
+                        if letters == ')' {
+                            stack.last_mut().unwrap().push(Block::Parameter(finished));
+                        } else {
+                            stack.last_mut().unwrap().push(Block::Collection(finished));
+                        }
                     }
                     skip = false;
                 }

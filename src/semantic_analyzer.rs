@@ -305,13 +305,16 @@ impl SemanticAnalyzer {
                     
                     if last_is_fn && !self.defining_fn {
                         self.defining_fn = true;
-                        self.defining_parameters = true;
-                        self.analyze(blocks.to_vec());
-                    } else if self.defining_fn {
-                        self.defining_parameters = false;
                         self.analyze(blocks.to_vec());
                         self.defining_fn = false;
-                    }
+                    } 
+                }
+                Block::Parameter(blocks) => {
+                    self.defining_fn = true;
+                    self.defining_parameters = true;
+                    self.analyze(blocks.to_vec());
+                    self.defining_parameters = false;
+                    self.defining_fn = false;
                 }
             }
         }
@@ -362,15 +365,18 @@ impl SemanticAnalyzer {
     fn active_table(&mut self) -> &mut Vec<TableTypes> {
         let which = if self.defining_fn {
             match self.table.last() {
-                Some(TableTypes::FUNCTION(_)) => {
+                Some(TableTypes::FUNCTION(func)) => {
                     if self.defining_parameters {
-                        ActiveTable::FunctionParameters
+                        if let Some(TableTypes::FUNCTION_CALL(_)) = func.table.last() {
+                            ActiveTable::FunctionTable
+                        } else {
+                            ActiveTable::FunctionParameters
+                        }
                     } else {
                         ActiveTable::FunctionTable
                     }
                 }
                 Some(TableTypes::REASIGNMENT(_)) => ActiveTable::ReassignmentParameters,
-                Some(TableTypes::FUNCTION_CALL(_)) => ActiveTable::FunctionCallParameters,
                 _ => ActiveTable::Root,
             }
         } else {
@@ -389,21 +395,17 @@ impl SemanticAnalyzer {
                     f.parameters.get_or_insert_with(Vec::new)
                 } else { unreachable!() }
             }
+            // TODO also should eliminate but not now
             ActiveTable::ReassignmentParameters => {
                 if let Some(TableTypes::REASIGNMENT(r)) = self.table.last_mut() {
                     r.parameters.get_or_insert_with(Vec::new)
                 } else { unreachable!()}
-            }
-            ActiveTable::FunctionCallParameters => {
-                if let Some(TableTypes::FUNCTION_CALL(r)) = self.table.last_mut() {
-                    r.parameters.get_or_insert_with(Vec::new)
-                } else { unreachable!()}
-            }
+            } 
+            _ => {todo!()}
         }
     }
 
-    fn tokenize_word(&mut self, mut word: Word) {
-        word.word = word.word.trim_end_matches(',').to_string();
+    fn tokenize_word(&mut self, word: Word) {
         let token = TokenType::from_str(&word.word);
 
         if token == TokenType::EQUALS {
@@ -472,7 +474,6 @@ impl SemanticAnalyzer {
 
         if in_function_call && fc_params_len >= expected_fc_params {
             self.error_messages.push(format!("Too many arguments for function call. Expected {}, got {}; Line: {}; Char pos: {}", expected_fc_params, fc_params_len + 1, word.line.unwrap_or(0), word.char_num.unwrap_or(0)));
-            return;
         }
 
         if in_call_or_reasign && token == TokenType::UNKNOW && index.is_none() {
@@ -480,7 +481,13 @@ impl SemanticAnalyzer {
             return;
         }
 
-        let new_entry = self.active_table().last_mut().unwrap();
+        let new_entry = match self.active_table().last_mut() {
+            Some(entry) => entry,
+            None => {
+                self.error_messages.push(("There wasn't a last entry").to_string()); 
+                return; 
+            },
+        };
         new_entry.add_arguments(word.word.clone());
         
         if let Some((idx, scope, is_func)) = index {
