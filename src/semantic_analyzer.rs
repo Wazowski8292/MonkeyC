@@ -3,57 +3,57 @@ use std::vec::Vec;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 enum TokenType {
-    IF,
-    ELSE,
+    If,
+    Else,
 
-    INT,
-    FLOAT,
-    BOOL,
-    CHAR,
-    STRING,
+    Int,
+    Float,
+    Bool,
+    Char,
+    String,
 
-    PLUS,
-    MINUS,
-    EQUALS,
+    Plus,
+    Minus,
+    Equals,
     
-    INTEGER_LITERAL,
-    FLOAT_LITERAL,
-    CHAR_LITERAL,
-    STRING_LITERAL,
-    BOOL_LITERAL,
+    IntegerLiteral,
+    FloatLiteral,
+    CharLiteral,
+    StringLiteral,
+    BoolLiteral,
 
-    FN,
+    FnLiteral,
     
-    UNKNOW,
+    Unknow,
 }
 
 impl TokenType {
     fn from_str(s: &str) -> Self {
         match s {
-            "if" => TokenType::IF,
-            "else" => TokenType::ELSE,
+            "if" => TokenType::If,
+            "else" => TokenType::Else,
 
-            "int" => TokenType::INT,
-            "float" => TokenType::FLOAT,
-            "str" => TokenType::STRING,
-            "bool" => TokenType::BOOL,
+            "int" => TokenType::Int,
+            "float" => TokenType::Float,
+            "str" => TokenType::String,
+            "bool" => TokenType::Bool,
 
-            "+" => TokenType::PLUS,
-            "-" => TokenType::MINUS,
-            "=" => TokenType::EQUALS,
+            "+" => TokenType::Plus,
+            "-" => TokenType::Minus,
+            "=" => TokenType::Equals,
 
-            "fn" => TokenType::FN,
+            "fn" => TokenType::FnLiteral,
 
-            _ if s.parse::<i64>().is_ok() => TokenType::INTEGER_LITERAL,
-            _ if s.parse::<f64>().is_ok() => TokenType::FLOAT_LITERAL,
+            _ if s.parse::<i64>().is_ok() => TokenType::IntegerLiteral,
+            _ if s.parse::<f64>().is_ok() => TokenType::FloatLiteral,
 
-            _ => TokenType::UNKNOW,
+            _ => TokenType::Unknow,
         }
     }
 
     fn is_value(token: TokenType) -> bool {
-        token == TokenType::UNKNOW || token == TokenType::INTEGER_LITERAL || token == TokenType::FLOAT_LITERAL ||
-        token ==TokenType::BOOL_LITERAL || token ==TokenType::STRING_LITERAL || token ==TokenType::CHAR_LITERAL
+        token == TokenType::Unknow || token == TokenType::IntegerLiteral || token == TokenType::FloatLiteral ||
+        token ==TokenType::BoolLiteral || token ==TokenType::StringLiteral || token ==TokenType::CharLiteral
     }
 }
 
@@ -111,7 +111,7 @@ impl Types for Function {
     }
 
     fn is_valid_argument(arg: String) -> bool {
-         matches!(TokenType::from_str(&arg), TokenType::UNKNOW)
+         matches!(TokenType::from_str(&arg), TokenType::Unknow)
     }
 
     fn finished_definition(&self) -> bool {
@@ -166,7 +166,7 @@ impl Types for Reasingment {
 
         let mut table_type = TableTypes::from_token(TokenType::from_str(&argument));
 
-        if let TableTypes::VARIABLE(ref mut v) = table_type {
+        if let TableTypes::Variable(ref mut v) = table_type {
             v.value = Some(argument);
         }
         self.parameters.get_or_insert_with(Vec::new).push(table_type); 
@@ -203,7 +203,7 @@ impl Types for FunctionCall {
 
         let mut table_type = TableTypes::from_token(TokenType::from_str(&argument));
 
-        if let TableTypes::VARIABLE(ref mut v) = table_type {
+        if let TableTypes::Variable(ref mut v) = table_type {
             v.value = Some(argument);
         }
         self.parameters.get_or_insert_with(Vec::new).push(table_type); 
@@ -212,12 +212,12 @@ impl Types for FunctionCall {
 
 #[derive(Debug, PartialEq, Clone)]
 enum TableTypes {
-    VARIABLE(Variable),
-    FUNCTION(Function),
-    REASIGNMENT(Reasingment),
-    FUNCTION_CALL(FunctionCall),
-    ARGUMENT,
-    CONDITIONAL,
+    Variable(Variable),
+    Function(Function),
+    Reasingment(Reasingment),
+    FunctionCall(FunctionCall),
+    Argument,
+    Conditional,
 }
 
 trait Types {
@@ -230,30 +230,30 @@ trait Types {
 impl TableTypes {
     fn from_token(token: TokenType) -> Self{
         match token {
-            TokenType::INT | TokenType::FLOAT | TokenType::STRING | TokenType::BOOL | TokenType::INTEGER_LITERAL | TokenType::FLOAT_LITERAL => TableTypes::VARIABLE(Variable::new(token)),
-            TokenType::FN => TableTypes::FUNCTION(Function::new(token)),
-            TokenType::IF | TokenType::ELSE => TableTypes::CONDITIONAL,
-            TokenType::UNKNOW => TableTypes::REASIGNMENT(Reasingment::new(TokenType::UNKNOW)),
-            _ => TableTypes::ARGUMENT,
+            TokenType::Int | TokenType::Float | TokenType::String | TokenType::Bool | TokenType::IntegerLiteral | TokenType::FloatLiteral => TableTypes::Variable(Variable::new(token)),
+            TokenType::FnLiteral => TableTypes::Function(Function::new(token)),
+            TokenType::If | TokenType::Else => TableTypes::Conditional,
+            TokenType::Unknow => TableTypes::Reasingment(Reasingment::new(TokenType::Unknow)),
+            _ => TableTypes::Argument,
         }
     }
 
     fn finished_definition(&self) -> bool {
         match self {
-            TableTypes::VARIABLE(var) => var.finished_definition(),
-            TableTypes::FUNCTION(fun) => fun.finished_definition(),
-            TableTypes::REASIGNMENT(asing) => asing.finished_definition(),
-            TableTypes::FUNCTION_CALL(fc) => fc.finished_definition(),
+            TableTypes::Variable(var) => var.finished_definition(),
+            TableTypes::Function(fun) => fun.finished_definition(),
+            TableTypes::Reasingment(asing) => asing.finished_definition(),
+            TableTypes::FunctionCall(fc) => fc.finished_definition(),
             _ => {true},
         }
     }
 
     fn add_arguments(&mut self, argument: String) {
         match self {
-            TableTypes::VARIABLE(var) => { var.add_arguments(argument)}
-            TableTypes::FUNCTION(fun) => { fun.add_arguments(argument)}
-            TableTypes::REASIGNMENT(reasing) => {reasing.add_arguments(argument)}
-            TableTypes::FUNCTION_CALL(fc) => {fc.add_arguments(argument)}
+            TableTypes::Variable(var) => { var.add_arguments(argument)}
+            TableTypes::Function(fun) => { fun.add_arguments(argument)}
+            TableTypes::Reasingment(reasing) => {reasing.add_arguments(argument)}
+            TableTypes::FunctionCall(fc) => {fc.add_arguments(argument)}
             _ => {}
         }
     }
@@ -301,7 +301,7 @@ impl SemanticAnalyzer {
                     }
                 }
                 Block::Collection(blocks) => {
-                    let last_is_fn = matches!(self.active_table().last(), Some(TableTypes::FUNCTION(_)));
+                    let last_is_fn = matches!(self.active_table().last(), Some(TableTypes::Function(_)));
                     
                     if last_is_fn && !self.defining_fn {
                         self.defining_fn = true;
@@ -310,11 +310,13 @@ impl SemanticAnalyzer {
                     } 
                 }
                 Block::Parameter(blocks) => {
+                    let prev_defining_fn = self.defining_fn;
+                    let prev_defining_parameters = self.defining_parameters;
                     self.defining_fn = true;
                     self.defining_parameters = true;
                     self.analyze(blocks.to_vec());
-                    self.defining_parameters = false;
-                    self.defining_fn = false;
+                    self.defining_parameters = prev_defining_parameters;
+                    self.defining_fn = prev_defining_fn;
                 }
             }
         }
@@ -322,8 +324,8 @@ impl SemanticAnalyzer {
 
     fn resolve(&mut self, name: String) -> Option<(usize, Scope, bool)> {
         let local_result = self.active_table().iter().enumerate().find_map(|(idx, entry)| match entry {
-            TableTypes::VARIABLE(v) if v.name == Some(name.clone()) => Some((idx, false)),
-            TableTypes::FUNCTION(f) if f.name == Some(name.clone()) => Some((idx, true)),
+            TableTypes::Variable(v) if v.name == Some(name.clone()) => Some((idx, false)),
+            TableTypes::Function(f) if f.name == Some(name.clone()) => Some((idx, true)),
             _ => None,
         });
 
@@ -335,10 +337,10 @@ impl SemanticAnalyzer {
         }
 
         if self.defining_fn {
-            if let Some(TableTypes::FUNCTION(f)) = self.table.last() {
+            if let Some(TableTypes::Function(f)) = self.table.last() {
                 if let Some(params) = &f.parameters {
                     let param_result = params.iter().enumerate().find_map(|(idx, entry)| match entry {
-                        TableTypes::VARIABLE(v) if v.name == Some(name.clone()) => Some((idx, false)),
+                        TableTypes::Variable(v) if v.name == Some(name.clone()) => Some((idx, false)),
                         _ => None,
                     });
                     if let Some((idx, is_func)) = param_result {
@@ -349,8 +351,8 @@ impl SemanticAnalyzer {
         }
         
         let root_result = self.table.iter().enumerate().find_map(|(idx, entry)| match entry {
-            TableTypes::VARIABLE(v) if v.name == Some(name.clone()) => Some((idx, false)),
-            TableTypes::FUNCTION(f) if f.name == Some(name.clone()) => Some((idx, true)),
+            TableTypes::Variable(v) if v.name == Some(name.clone()) => Some((idx, false)),
+            TableTypes::Function(f) if f.name == Some(name.clone()) => Some((idx, true)),
             _ => None,
         });
 
@@ -365,9 +367,9 @@ impl SemanticAnalyzer {
     fn active_table(&mut self) -> &mut Vec<TableTypes> {
         let which = if self.defining_fn {
             match self.table.last() {
-                Some(TableTypes::FUNCTION(func)) => {
+                Some(TableTypes::Function(func)) => {
                     if self.defining_parameters {
-                        if let Some(TableTypes::FUNCTION_CALL(_)) = func.table.last() {
+                        if let Some(TableTypes::FunctionCall(_)) = func.table.last() {
                             ActiveTable::FunctionTable
                         } else {
                             ActiveTable::FunctionParameters
@@ -376,7 +378,7 @@ impl SemanticAnalyzer {
                         ActiveTable::FunctionTable
                     }
                 }
-                Some(TableTypes::REASIGNMENT(_)) => ActiveTable::ReassignmentParameters,
+                Some(TableTypes::Reasingment(_)) => ActiveTable::ReassignmentParameters,
                 _ => ActiveTable::Root,
             }
         } else {
@@ -386,18 +388,18 @@ impl SemanticAnalyzer {
         match which {
             ActiveTable::Root => &mut self.table,
             ActiveTable::FunctionTable => {
-                if let Some(TableTypes::FUNCTION(f)) = self.table.last_mut() {
+                if let Some(TableTypes::Function(f)) = self.table.last_mut() {
                     &mut f.table
                 } else { unreachable!() }
             }
             ActiveTable::FunctionParameters => {
-                if let Some(TableTypes::FUNCTION(f)) = self.table.last_mut() {
+                if let Some(TableTypes::Function(f)) = self.table.last_mut() {
                     f.parameters.get_or_insert_with(Vec::new)
                 } else { unreachable!() }
             }
             // TODO also should eliminate but not now
             ActiveTable::ReassignmentParameters => {
-                if let Some(TableTypes::REASIGNMENT(r)) = self.table.last_mut() {
+                if let Some(TableTypes::Reasingment(r)) = self.table.last_mut() {
                     r.parameters.get_or_insert_with(Vec::new)
                 } else { unreachable!()}
             } 
@@ -408,7 +410,7 @@ impl SemanticAnalyzer {
     fn tokenize_word(&mut self, word: Word) {
         let token = TokenType::from_str(&word.word);
 
-        if token == TokenType::EQUALS {
+        if token == TokenType::Equals {
             self.set_value = true;
             return;
         }
@@ -423,10 +425,10 @@ impl SemanticAnalyzer {
         let mut fc_params_len = 0;
 
         match self.active_table().last() {
-            Some(TableTypes::REASIGNMENT(r)) => {
+            Some(TableTypes::Reasingment(r)) => {
                 last_completed = r.parameters.as_ref().map_or(0, |p| p.len()) >= 1;
             }
-            Some(TableTypes::FUNCTION_CALL(fc)) => {
+            Some(TableTypes::FunctionCall(fc)) => {
                 is_fc = true;
                 fc_target = fc.target;
                 fc_target_scope = fc.target_scope;
@@ -439,13 +441,13 @@ impl SemanticAnalyzer {
         if is_fc {
             let expected_params = match fc_target_scope {
                 Scope::Root =>{ 
-                    if let Some(TableTypes::FUNCTION(f)) = self.table.get(fc_target) {
+                    if let Some(TableTypes::Function(f)) = self.table.get(fc_target) {
                         f.parameters.as_ref().map_or(0, |p| p.len())
                     } else { 0 }
                 },
                 Scope::Function => {
-                    if let Some(TableTypes::FUNCTION(f)) = self.table.last() {
-                        if let Some(TableTypes::FUNCTION(inner)) = f.table.get(fc_target) {
+                    if let Some(TableTypes::Function(f)) = self.table.last() {
+                        if let Some(TableTypes::Function(inner)) = f.table.get(fc_target) {
                             inner.parameters.as_ref().map_or(0, |p| p.len())
                         } else { 0 }
                     } else { 0 }
@@ -456,8 +458,8 @@ impl SemanticAnalyzer {
             last_completed = false;
         }
 
-        let in_reasignment = matches!(self.active_table().last(), Some(TableTypes::REASIGNMENT(_)));
-        let in_function_call = matches!(self.active_table().last(), Some(TableTypes::FUNCTION_CALL(_)));
+        let in_reasignment = matches!(self.active_table().last(), Some(TableTypes::Reasingment(_)));
+        let in_function_call = matches!(self.active_table().last(), Some(TableTypes::FunctionCall(_))) && self.defining_parameters;
         
         let in_call_or_reasign = (in_reasignment || in_function_call) && !last_completed;
         
@@ -476,7 +478,7 @@ impl SemanticAnalyzer {
             self.error_messages.push(format!("Too many arguments for function call. Expected {}, got {}; Line: {}; Char pos: {}", expected_fc_params, fc_params_len + 1, word.line.unwrap_or(0), word.char_num.unwrap_or(0)));
         }
 
-        if in_call_or_reasign && token == TokenType::UNKNOW && index.is_none() {
+        if in_call_or_reasign && token == TokenType::Unknow && index.is_none() {
             self.error_messages.push(format!("Undefined symbol: {}; Line: {}; Char pos: {}", word.word, word.line.unwrap_or(0), word.char_num.unwrap_or(0)));
             return;
         }
@@ -492,15 +494,15 @@ impl SemanticAnalyzer {
         
         if let Some((idx, scope, is_func)) = index {
             let last_param = match new_entry {
-                TableTypes::REASIGNMENT(r) => r.parameters.as_mut().and_then(|p| p.last_mut()),
-                TableTypes::FUNCTION_CALL(fc) => fc.parameters.as_mut().and_then(|p| p.last_mut()),
+                TableTypes::Reasingment(r) => r.parameters.as_mut().and_then(|p| p.last_mut()),
+                TableTypes::FunctionCall(fc) => fc.parameters.as_mut().and_then(|p| p.last_mut()),
                 _ => None,
             };
 
             if let Some(last) = last_param {
-                if let TableTypes::REASIGNMENT(v) = last {
+                if let TableTypes::Reasingment(v) = last {
                     if is_func {
-                        *last = TableTypes::FUNCTION_CALL(FunctionCall {
+                        *last = TableTypes::FunctionCall(FunctionCall {
                             target: idx,
                             target_scope: scope,
                             parameters: None,
@@ -515,11 +517,9 @@ impl SemanticAnalyzer {
     }
 
     fn handle_new_entry(&mut self, word: Word, token: TokenType, index: Option<(usize, Scope, bool)>) {
-        let is_known = token != TokenType::UNKNOW || index.is_some();
-
         if !TokenType::is_value(token) {
             self.add_entry(token);
-        } else if is_known {
+        } else if index.is_some() {
             self.set_value = true;
 
             let (idx, scope, is_func) = index.expect("Error finding the index of the value to be reasign");
@@ -530,14 +530,14 @@ impl SemanticAnalyzer {
                     target_scope: scope,
                     parameters: None,
                 };
-                self.active_table().push(TableTypes::FUNCTION_CALL(func_call));
+                self.active_table().push(TableTypes::FunctionCall(func_call));
             } else {
                 let reasign = Reasingment {
                     target: idx,
                     target_scope: scope,
                     parameters: None,
                 };
-                self.active_table().push(TableTypes::REASIGNMENT(reasign));
+                self.active_table().push(TableTypes::Reasingment(reasign));
             }
         } else {
             self.error_messages.push(format!("Undefined symbol: {}; Line: {}:{}", word.word, word.line.unwrap_or(0), word.char_num.unwrap_or(0)));
