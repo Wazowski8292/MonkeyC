@@ -1,5 +1,5 @@
 use crate::parser::{Block, Word};
-use crate::variable_types::{Variable, Function, Reasingment, FunctionCall, Types};
+use crate::variable_types::{Variable, Function, Reasingment, FunctionCall, Conditional, Types};
 use std::vec::Vec;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -47,6 +47,9 @@ impl TokenType {
 
             _ if s.parse::<i64>().is_ok() => TokenType::IntegerLiteral,
             _ if s.parse::<f64>().is_ok() => TokenType::FloatLiteral,
+            _ if s.len() >= 2 && s.starts_with('"') && s.ends_with('"') => TokenType::StringLiteral,
+            _ if s.len() >= 3 && s.starts_with('\'') && s.ends_with('\'') => TokenType::CharLiteral,
+            "true" | "false" => TokenType::BoolLiteral,
 
             _ => TokenType::Unknow,
         }
@@ -54,7 +57,7 @@ impl TokenType {
 
     pub fn is_value(token: TokenType) -> bool {
         token == TokenType::Unknow || token == TokenType::IntegerLiteral || token == TokenType::FloatLiteral ||
-        token ==TokenType::BoolLiteral || token ==TokenType::StringLiteral || token ==TokenType::CharLiteral
+        token == TokenType::BoolLiteral || token ==TokenType::StringLiteral || token ==TokenType::CharLiteral
     }
 }
 
@@ -71,16 +74,16 @@ pub enum TableTypes {
     Function(Function),
     Reasingment(Reasingment),
     FunctionCall(FunctionCall),
+    Conditional(Conditional),
     Argument,
-    Conditional,
 }
 
 impl TableTypes {
     pub fn from_token(token: TokenType) -> Self{
         match token {
-            TokenType::Int | TokenType::Float | TokenType::String | TokenType::Bool | TokenType::IntegerLiteral | TokenType::FloatLiteral => TableTypes::Variable(Variable::new(token)),
+            TokenType::Int | TokenType::Float | TokenType::String | TokenType::Bool | TokenType::IntegerLiteral | TokenType::FloatLiteral | TokenType::BoolLiteral | TokenType::StringLiteral | TokenType::CharLiteral => TableTypes::Variable(Variable::new(token)),
             TokenType::FnLiteral => TableTypes::Function(Function::new(token)),
-            TokenType::If | TokenType::Else => TableTypes::Conditional,
+            TokenType::If | TokenType::Else => TableTypes::Conditional(Conditional::new(token)),
             TokenType::Unknow => TableTypes::Reasingment(Reasingment::new(TokenType::Unknow)),
             _ => TableTypes::Argument,
         }
@@ -92,16 +95,18 @@ impl TableTypes {
             TableTypes::Function(fun) => fun.finished_definition(),
             TableTypes::Reasingment(asing) => asing.finished_definition(),
             TableTypes::FunctionCall(fc) => fc.finished_definition(),
+            TableTypes::Conditional(con) => con.finished_definition(),
             _ => {true},
         }
     }
 
     fn add_arguments(&mut self, argument: String) {
         match self {
-            TableTypes::Variable(var) => { var.add_arguments(argument)}
-            TableTypes::Function(fun) => { fun.add_arguments(argument)}
-            TableTypes::Reasingment(reasing) => {reasing.add_arguments(argument)}
-            TableTypes::FunctionCall(fc) => {fc.add_arguments(argument)}
+            TableTypes::Variable(var) => var.add_arguments(argument),
+            TableTypes::Function(fun) => fun.add_arguments(argument),
+            TableTypes::Reasingment(reasing) => reasing.add_arguments(argument),
+            TableTypes::FunctionCall(fc) => fc.add_arguments(argument),
+            TableTypes::Conditional(con) => con.add_arguments(argument),
             _ => {}
         }
     }

@@ -153,3 +153,39 @@ impl Types for FunctionCall {
         self.parameters.get_or_insert_with(Vec::new).push(table_type); 
     }
 }
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct Conditional {
+    condition: Vec<TableTypes>,
+    table: Vec<TableTypes>,
+}
+
+impl Types for Conditional {
+    fn new(token: TokenType) -> Self {
+        Self {
+            condition: vec![],
+            table: vec![],
+        }
+    }
+
+    fn is_valid_argument(arg: String) -> bool {
+        true
+    }
+
+    fn finished_definition(&self) -> bool {
+        self.condition.len() > 0
+    }
+
+    fn add_arguments(&mut self, argument: String) {
+        if !FunctionCall::is_valid_argument(argument.clone()) {
+            return;
+        }
+
+        let mut table_type = TableTypes::from_token(TokenType::from_str(&argument));
+
+        if let TableTypes::Variable(ref mut v) = table_type {
+            v.value = Some(argument);
+        }
+        self.condition.push(table_type); 
+    }
+} 
