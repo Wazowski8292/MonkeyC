@@ -116,8 +116,7 @@ enum ActiveTable {
     Root,
     FunctionTable,
     FunctionParameters,
-    ReassignmentParameters,
-    FunctionCallParameters,
+    ConditionalTable,
 }
 
 struct SemanticAnalyzer {
@@ -161,6 +160,7 @@ impl SemanticAnalyzer {
                         self.analyze(blocks.to_vec());
                         self.defining_fn = false;
                     } 
+
                 }
                 Block::Parameter(blocks) => {
                     let prev_defining_fn = self.defining_fn;
@@ -222,16 +222,18 @@ impl SemanticAnalyzer {
             match self.table.last() {
                 Some(TableTypes::Function(func)) => {
                     if self.defining_parameters {
-                        if let Some(TableTypes::FunctionCall(_)) = func.table.last() {
-                            ActiveTable::FunctionTable
-                        } else {
-                            ActiveTable::FunctionParameters
+                        match func.table.last() {
+                            Some(TableTypes::FunctionCall(_)) => ActiveTable::FunctionTable,
+                            Some(TableTypes::Conditional(_)) => ActiveTable::FunctionTable,
+                            _ => ActiveTable::FunctionParameters
                         }
                     } else {
-                        ActiveTable::FunctionTable
+                        match func.table.last() {
+                            Some(TableTypes::Conditional(_)) => ActiveTable::ConditionalTable,
+                            _ => ActiveTable::FunctionTable
+                        }
                     }
                 }
-                Some(TableTypes::Reasingment(_)) => ActiveTable::ReassignmentParameters,
                 _ => ActiveTable::Root,
             }
         } else {
@@ -250,12 +252,14 @@ impl SemanticAnalyzer {
                     f.parameters.get_or_insert_with(Vec::new)
                 } else { unreachable!() }
             }
-            // TODO also should eliminate but not now
-            ActiveTable::ReassignmentParameters => {
-                if let Some(TableTypes::Reasingment(r)) = self.table.last_mut() {
-                    r.parameters.get_or_insert_with(Vec::new)
-                } else { unreachable!()}
-            } 
+            ActiveTable::ConditionalTable => {
+                println!("Conditional!!");
+                if let Some(TableTypes::Function(f)) = self.table.last_mut() {
+                    if let Some(TableTypes::Conditional(con)) = f.table.last_mut() {
+                        &mut con.table
+                    } else { unreachable!() }
+                } else { unreachable!() }
+            }
             _ => {todo!()}
         }
     }
@@ -313,10 +317,11 @@ impl SemanticAnalyzer {
 
         let in_reasignment = matches!(self.active_table().last(), Some(TableTypes::Reasingment(_)));
         let in_function_call = matches!(self.active_table().last(), Some(TableTypes::FunctionCall(_))) && self.defining_parameters;
+        let in_conditional = matches!(self.active_table().last(), Some(TableTypes::Conditional(_)));
         
-        let in_call_or_reasign = (in_reasignment || in_function_call) && !last_completed;
+        let in_call = (in_reasignment || in_function_call || in_conditional) && !last_completed;
         
-        if !last_finished || self.set_value || in_call_or_reasign {
+        if !last_finished || self.set_value || in_call {
             self.handle_argument(word, token, index, in_reasignment, in_function_call, expected_fc_params, fc_params_len);
         } else {
             self.handle_new_entry(word, token, index);

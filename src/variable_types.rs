@@ -157,7 +157,7 @@ impl Types for FunctionCall {
 #[derive(Debug, PartialEq, Clone)]
 pub struct Conditional {
     condition: Vec<TableTypes>,
-    table: Vec<TableTypes>,
+    pub table: Vec<TableTypes>,
 }
 
 impl Types for Conditional {
