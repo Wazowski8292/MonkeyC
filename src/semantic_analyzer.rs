@@ -153,6 +153,7 @@ impl SemanticAnalyzer {
                     }
                 }
                 Block::Collection(blocks) => {
+                    println!("colection");
                     let last_is_fn = matches!(self.active_table().last(), Some(TableTypes::Function(_)));
                     
                     if last_is_fn && !self.defining_fn {
@@ -260,11 +261,13 @@ impl SemanticAnalyzer {
                     } else { unreachable!() }
                 } else { unreachable!() }
             }
-            _ => {todo!()}
         }
     }
 
     fn tokenize_word(&mut self, word: Word) {
+        if word.word == "f" {
+            println!("SCAS");
+        }
         let token = TokenType::from_str(&word.word);
 
         if token == TokenType::Equals {

@@ -70,7 +70,8 @@
 - [ ] Make function parameter actually do something(do checks)
     -> [x] Do parameter amount checks
     -> [ ] Do parameter type checks
-- [ ] Add conditionals
+- [x] Add conditionals
+- [ ] Need to make nested code compile
 
 ---
 

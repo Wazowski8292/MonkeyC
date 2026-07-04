@@ -161,14 +161,14 @@ pub struct Conditional {
 }
 
 impl Types for Conditional {
-    fn new(token: TokenType) -> Self {
+    fn new(_: TokenType) -> Self {
         Self {
             condition: vec![],
             table: vec![],
         }
     }
 
-    fn is_valid_argument(arg: String) -> bool {
+    fn is_valid_argument(_: String) -> bool {
         true
     }
 

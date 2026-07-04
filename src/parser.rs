@@ -126,7 +126,7 @@ pub fn parse_text(file_path: &String) -> Result<Vec<Block>, String> {
 
     let current_collection = stack.pop().unwrap();
     if !current_collection.is_empty() {
-        //println!("{:#?}", current_collection);
+        println!("{:#?}", current_collection);
     }
     Ok(current_collection)
 }
