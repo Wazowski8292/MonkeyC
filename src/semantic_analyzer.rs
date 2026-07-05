@@ -75,7 +75,7 @@ pub enum TableTypes {
     Reasingment(Reasingment),
     FunctionCall(FunctionCall),
     Conditional(Conditional),
-    Argument,
+    Unknown,
 }
 
 impl TableTypes {
@@ -85,7 +85,7 @@ impl TableTypes {
             TokenType::FnLiteral => TableTypes::Function(Function::new(token)),
             TokenType::If | TokenType::Else => TableTypes::Conditional(Conditional::new(token)),
             TokenType::Unknow => TableTypes::Reasingment(Reasingment::new(TokenType::Unknow)),
-            _ => TableTypes::Argument,
+            _ => TableTypes::Unknown,
         }
     }
 
@@ -95,7 +95,7 @@ impl TableTypes {
             TableTypes::Function(fun) => fun.finished_definition(),
             TableTypes::Reasingment(asing) => asing.finished_definition(),
             TableTypes::FunctionCall(fc) => fc.finished_definition(),
-            TableTypes::Conditional(con) => con.finished_definition(),
+            TableTypes::Conditional(con) => {println!("Nice"); con.finished_definition()},
             _ => {true},
         }
     }
@@ -110,13 +110,6 @@ impl TableTypes {
             _ => {}
         }
     }
-}
-
-enum ActiveTable {
-    Root,
-    FunctionTable,
-    FunctionParameters,
-    ConditionalTable,
 }
 
 struct SemanticAnalyzer {
@@ -153,14 +146,15 @@ impl SemanticAnalyzer {
                     }
                 }
                 Block::Collection(blocks) => {
-                    println!("colection");
                     let last_is_fn = matches!(self.active_table().last(), Some(TableTypes::Function(_)));
                     
                     if last_is_fn && !self.defining_fn {
                         self.defining_fn = true;
                         self.analyze(blocks.to_vec());
                         self.defining_fn = false;
-                    } 
+                    } else {
+                        self.analyze(blocks.to_vec());
+                    }
 
                 }
                 Block::Parameter(blocks) => {
@@ -219,55 +213,45 @@ impl SemanticAnalyzer {
     }
 
     fn active_table(&mut self) -> &mut Vec<TableTypes> {
-        let which = if self.defining_fn {
-            match self.table.last() {
-                Some(TableTypes::Function(func)) => {
-                    if self.defining_parameters {
-                        match func.table.last() {
-                            Some(TableTypes::FunctionCall(_)) => ActiveTable::FunctionTable,
-                            Some(TableTypes::Conditional(_)) => ActiveTable::FunctionTable,
-                            _ => ActiveTable::FunctionParameters
-                        }
-                    } else {
-                        match func.table.last() {
-                            Some(TableTypes::Conditional(_)) => ActiveTable::ConditionalTable,
-                            _ => ActiveTable::FunctionTable
-                        }
-                    }
-                }
-                _ => ActiveTable::Root,
-            }
+        if self.defining_fn {
+            Self::desend_table(self.defining_parameters, &mut self.table)
         } else {
-            ActiveTable::Root
-        };
+            &mut self.table
+        }
+    }
 
-        match which {
-            ActiveTable::Root => &mut self.table,
-            ActiveTable::FunctionTable => {
-                if let Some(TableTypes::Function(f)) = self.table.last_mut() {
-                    &mut f.table
-                } else { unreachable!() }
+    fn desend_table(defining_parameters: bool, last_table: &mut Vec<TableTypes>) -> &mut Vec<TableTypes> {
+        let has_child = matches!(
+            last_table.last(),
+            Some(TableTypes::Function(_)) | Some(TableTypes::Conditional(_))
+        );
+
+        if !has_child {
+            return last_table;
+        }
+
+        if defining_parameters {
+           if let Some(TableTypes::Conditional(_)) = last_table.last() {
+            return last_table;
             }
-            ActiveTable::FunctionParameters => {
-                if let Some(TableTypes::Function(f)) = self.table.last_mut() {
-                    f.parameters.get_or_insert_with(Vec::new)
-                } else { unreachable!() }
-            }
-            ActiveTable::ConditionalTable => {
-                println!("Conditional!!");
-                if let Some(TableTypes::Function(f)) = self.table.last_mut() {
-                    if let Some(TableTypes::Conditional(con)) = f.table.last_mut() {
-                        &mut con.table
-                    } else { unreachable!() }
-                } else { unreachable!() }
-            }
+        }
+
+        match last_table.last_mut().unwrap() {
+            TableTypes::Function(func) => {
+                if defining_parameters {
+                    func.parameters.get_or_insert_with(Vec::new)
+                } else {
+                    Self::desend_table(defining_parameters, &mut func.table)
+                }
+            },
+            TableTypes::Conditional(con) => {
+                Self::desend_table(defining_parameters, &mut con.table)
+            },
+            _ => unreachable!(),
         }
     }
 
     fn tokenize_word(&mut self, word: Word) {
-        if word.word == "f" {
-            println!("SCAS");
-        }
         let token = TokenType::from_str(&word.word);
 
         if token == TokenType::Equals {
@@ -278,16 +262,12 @@ impl SemanticAnalyzer {
         let index = self.resolve(word.word.clone());
         let last_finished = self.active_table().last().map_or(true, |e| e.finished_definition());
         
-        let mut last_completed = false;
         let mut is_fc = false;
         let mut fc_target = 0;
         let mut fc_target_scope = Scope::Root;
         let mut fc_params_len = 0;
 
         match self.active_table().last() {
-            Some(TableTypes::Reasingment(r)) => {
-                last_completed = r.parameters.as_ref().map_or(0, |p| p.len()) >= 1;
-            }
             Some(TableTypes::FunctionCall(fc)) => {
                 is_fc = true;
                 fc_target = fc.target;
@@ -315,14 +295,14 @@ impl SemanticAnalyzer {
                 _ => 0,
             };
             expected_fc_params = expected_params;
-            last_completed = false;
+            last_finished = false;
         }
 
         let in_reasignment = matches!(self.active_table().last(), Some(TableTypes::Reasingment(_)));
         let in_function_call = matches!(self.active_table().last(), Some(TableTypes::FunctionCall(_))) && self.defining_parameters;
         let in_conditional = matches!(self.active_table().last(), Some(TableTypes::Conditional(_)));
         
-        let in_call = (in_reasignment || in_function_call || in_conditional) && !last_completed;
+        let in_call = (in_reasignment || in_function_call || in_conditional) && !last_finished;
         
         if !last_finished || self.set_value || in_call {
             self.handle_argument(word, token, index, in_reasignment, in_function_call, expected_fc_params, fc_params_len);

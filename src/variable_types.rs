@@ -75,6 +75,13 @@ impl Types for Function {
 
         if self.name == None {
             self.name = Some(argument.clone());
+        } else {
+            let mut table_type = TableTypes::from_token(TokenType::from_str(&argument));
+
+            if let TableTypes::Variable(ref mut v) = table_type {
+                v.value = Some(argument);
+            }
+            self.parameters.get_or_insert_with(Vec::new).push(table_type); 
         }
     }
 }
@@ -100,7 +107,7 @@ impl Types for Reasingment {
     }
     
     fn finished_definition(&self) -> bool {
-        true
+        parameters
     }
 
     fn add_arguments(&mut self, argument: String) {
@@ -156,7 +163,7 @@ impl Types for FunctionCall {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Conditional {
-    condition: Vec<TableTypes>,
+    pub condition: Vec<TableTypes>,
     pub table: Vec<TableTypes>,
 }
 
@@ -173,6 +180,7 @@ impl Types for Conditional {
     }
 
     fn finished_definition(&self) -> bool {
+        println!("Asking for parameters; len {}", self.condition.len());
         self.condition.len() > 0
     }
 
