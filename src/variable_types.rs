@@ -107,7 +107,7 @@ impl Types for Reasingment {
     }
     
     fn finished_definition(&self) -> bool {
-        parameters
+        self.parameters.clone().map_or(0, |p| p.len()) >= 0
     }
 
     fn add_arguments(&mut self, argument: String) {
@@ -180,7 +180,6 @@ impl Types for Conditional {
     }
 
     fn finished_definition(&self) -> bool {
-        println!("Asking for parameters; len {}", self.condition.len());
         self.condition.len() > 0
     }
 

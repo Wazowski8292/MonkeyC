@@ -38,6 +38,7 @@ impl TokenType {
             "float" => TokenType::Float,
             "str" => TokenType::String,
             "bool" => TokenType::Bool,
+            "char" => TokenType::Char,
 
             "+" => TokenType::Plus,
             "-" => TokenType::Minus,
@@ -81,7 +82,7 @@ pub enum TableTypes {
 impl TableTypes {
     pub fn from_token(token: TokenType) -> Self{
         match token {
-            TokenType::Int | TokenType::Float | TokenType::String | TokenType::Bool | TokenType::IntegerLiteral | TokenType::FloatLiteral | TokenType::BoolLiteral | TokenType::StringLiteral | TokenType::CharLiteral => TableTypes::Variable(Variable::new(token)),
+            TokenType::Int | TokenType::Float | TokenType::String | TokenType::Bool | TokenType::Char | TokenType::IntegerLiteral | TokenType::FloatLiteral | TokenType::BoolLiteral | TokenType::StringLiteral | TokenType::CharLiteral => TableTypes::Variable(Variable::new(token)),
             TokenType::FnLiteral => TableTypes::Function(Function::new(token)),
             TokenType::If | TokenType::Else => TableTypes::Conditional(Conditional::new(token)),
             TokenType::Unknow => TableTypes::Reasingment(Reasingment::new(TokenType::Unknow)),
@@ -95,7 +96,7 @@ impl TableTypes {
             TableTypes::Function(fun) => fun.finished_definition(),
             TableTypes::Reasingment(asing) => asing.finished_definition(),
             TableTypes::FunctionCall(fc) => fc.finished_definition(),
-            TableTypes::Conditional(con) => {println!("Nice"); con.finished_definition()},
+            TableTypes::Conditional(con) => con.finished_definition(),
             _ => {true},
         }
     }
@@ -118,6 +119,7 @@ struct SemanticAnalyzer {
     set_value: bool,
     defining_fn: bool,
     defining_parameters: bool,
+    max_nesting: usize,
 }
 
 impl SemanticAnalyzer {
@@ -128,6 +130,7 @@ impl SemanticAnalyzer {
             set_value: false,
             defining_fn: false,
             defining_parameters: false,
+            max_nesting: 1,
         }
     }
 
@@ -146,6 +149,7 @@ impl SemanticAnalyzer {
                     }
                 }
                 Block::Collection(blocks) => {
+                    self.max_nesting += 1;
                     let last_is_fn = matches!(self.active_table().last(), Some(TableTypes::Function(_)));
                     
                     if last_is_fn && !self.defining_fn {
@@ -156,6 +160,7 @@ impl SemanticAnalyzer {
                         self.analyze(blocks.to_vec());
                     }
 
+                    self.max_nesting -= 1;
                 }
                 Block::Parameter(blocks) => {
                     let prev_defining_fn = self.defining_fn;
@@ -214,38 +219,39 @@ impl SemanticAnalyzer {
 
     fn active_table(&mut self) -> &mut Vec<TableTypes> {
         if self.defining_fn {
-            Self::desend_table(self.defining_parameters, &mut self.table)
+            Self::desend_table(self.defining_parameters, &mut self.table, 1, self.max_nesting)
         } else {
             &mut self.table
         }
     }
 
-    fn desend_table(defining_parameters: bool, last_table: &mut Vec<TableTypes>) -> &mut Vec<TableTypes> {
+    fn desend_table(defining_parameters: bool, last_table: &mut Vec<TableTypes>, current_nest_level: usize, max_nesting: usize) -> &mut Vec<TableTypes> {
+        
         let has_child = matches!(
             last_table.last(),
             Some(TableTypes::Function(_)) | Some(TableTypes::Conditional(_))
         );
 
-        if !has_child {
+        if !has_child || (current_nest_level + 1 > max_nesting ) && !defining_parameters {
             return last_table;
         }
 
         if defining_parameters {
            if let Some(TableTypes::Conditional(_)) = last_table.last() {
-            return last_table;
+                return last_table;
             }
         }
 
         match last_table.last_mut().unwrap() {
             TableTypes::Function(func) => {
-                if defining_parameters {
+                if defining_parameters && func.table.is_empty() {
                     func.parameters.get_or_insert_with(Vec::new)
                 } else {
-                    Self::desend_table(defining_parameters, &mut func.table)
+                    Self::desend_table(defining_parameters, &mut func.table, current_nest_level + 1, max_nesting)
                 }
             },
             TableTypes::Conditional(con) => {
-                Self::desend_table(defining_parameters, &mut con.table)
+                Self::desend_table(defining_parameters, &mut con.table, current_nest_level + 1, max_nesting)
             },
             _ => unreachable!(),
         }
@@ -260,7 +266,7 @@ impl SemanticAnalyzer {
         }
 
         let index = self.resolve(word.word.clone());
-        let last_finished = self.active_table().last().map_or(true, |e| e.finished_definition());
+        let mut last_finished = self.active_table().last().map_or(true, |e| e.finished_definition());
         
         let mut is_fc = false;
         let mut fc_target = 0;
