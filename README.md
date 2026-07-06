@@ -62,22 +62,20 @@
 
 ## Todo
 
-- [x] Add a parser
-- [x] Make semantic analyzer detect var defenitions
-- [x] Make semantic analyzer detect funtion defenitions
-- [x] Make semantic analyzer reasing and call var defenitions
-- [x] Need to fix a problem with finding fn definitions
 - [ ] Make function parameter actually do something(do checks)
     -> [x] Do parameter amount checks
     -> [ ] Do parameter type checks
-- [x] Add conditionals
-- [ ] Need to make nested code compile
+- [ ] Add loops
+- [ ] Add oparetors
+    -> [ ] Arirmetic operators    
+    -> [ ] logical operators    
+    -> [ ] binary operators
+- [ ] Rewrite the hole TypeTable but in a simple programming language similar to assembly
 
 ---
 
 ## Long tenm goals
 
-- [ ] Rewrite the hole TypeTable but in a simple programming language similar to assembly
 - [ ] Pass the code to assembly
 - [ ] Actually compile
 - [ ] Add a simple standar library
