@@ -221,40 +221,88 @@ impl SemanticAnalyzer {
     } 
 
     fn resolve(&mut self, name: String) -> Option<(usize, Scope, bool)> {
-        let local_result = self.active_table().iter().enumerate().find_map(|(idx, entry)| match entry {
-            TableTypes::Variable(v) if v.name == Some(name.clone()) => Some((idx, false)),
-            TableTypes::Function(f) if f.name == Some(name.clone()) => Some((idx, true)),
-            _ => None,
-        });
+        if let Some(result) = Self::resolve_in_chain( &name, &mut self.table, 0, self.max_nesting, self.defining_parameters) {
+            return Some(result);
+        } else {
+            return self.resolve_in_parameters(&name);
+        }
+    }
 
-        if let Some((idx, is_func)) = local_result {
-            if !self.defining_fn {
-                return Some((idx, Scope::Root, is_func));
+    fn find_in_level(name: &str, table: &Vec<TableTypes>, nest_level: usize) -> Option<(usize, Scope, bool)> {
+        table.iter().enumerate().find_map(|(idx, entry)| match entry {
+            TableTypes::Variable(v) if v.name.as_deref() == Some(name) => {
+                Some((idx, Self::scope_for_level(nest_level), false))
             }
-            return Some((idx, Scope::Function, is_func));
+            TableTypes::Function(f) if f.name.as_deref() == Some(name) => {
+                Some((idx, Self::scope_for_level(nest_level), true))
+            }
+            _ => None,
+        })
+    }
+
+    fn scope_for_level(nest_level: usize) -> Scope {
+        if nest_level == 0 { Scope::Root } else { Scope::Function }
+    }
+
+    fn should_descend(table: &Vec<TableTypes>, current_nest_level: usize, max_nesting: usize, defining_parameters: bool) -> bool {
+        let has_child = matches!(
+            table.last(),
+            Some(TableTypes::Function(_)) | Some(TableTypes::Conditional(_)) | Some(TableTypes::Loop(_))
+        );
+        if !has_child {
+            return false;
         }
 
-        if self.defining_fn {
-            if let Some(TableTypes::Function(f)) = self.table.last() {
-                if let Some(params) = &f.parameters {
-                    let param_result = params.iter().enumerate().find_map(|(idx, entry)| match entry {
-                        TableTypes::Variable(v) if v.name == Some(name.clone()) => Some((idx, false)),
-                        _ => None,
-                    });
-                    if let Some((idx, is_func)) = param_result {
-                        return Some((idx, Scope::Parameter, is_func));
-                    }
+        let nesting_exhausted = (current_nest_level + 1 > max_nesting) && !defining_parameters;
+        let blocked_by_params = defining_parameters
+            && matches!(table.last(), Some(TableTypes::Conditional(_)) | Some(TableTypes::Loop(_)));
+
+        !nesting_exhausted && !blocked_by_params
+    }
+
+    fn descend_and_resolve(name: &str, table: &mut Vec<TableTypes>, current_nest_level: usize, max_nesting: usize, defining_parameters: bool) -> Option<(usize, Scope, bool)> {
+        match table.last_mut().unwrap() {
+            TableTypes::Function(func) => {
+                if defining_parameters && func.table.is_empty() {
+                    None
+                } else {
+                    Self::resolve_in_chain(name, &mut func.table, current_nest_level + 1, max_nesting, defining_parameters)
                 }
             }
+            TableTypes::Conditional(con) => {
+                Self::resolve_in_chain(name, &mut con.table, current_nest_level + 1, max_nesting, defining_parameters)
+            }
+            TableTypes::Loop(while_loop) => {
+                Self::resolve_in_chain(name, &mut while_loop.table, current_nest_level + 1, max_nesting, defining_parameters)
+            }
+            _ => unreachable!(),
         }
-        
-        let root_result = self.table.iter().enumerate().find_map(|(idx, entry)| match entry {
-            TableTypes::Variable(v) if v.name == Some(name.clone()) => Some((idx, false)),
-            TableTypes::Function(f) if f.name == Some(name.clone()) => Some((idx, true)),
-            _ => None,
-        });
+    }
 
-        root_result.map(|(idx, is_func)| (idx, Scope::Root, is_func))
+    fn resolve_in_chain( name: &str, table: &mut Vec<TableTypes>, current_nest_level: usize, max_nesting: usize, defining_parameters: bool) -> Option<(usize, Scope, bool)> {
+        if Self::should_descend(table, current_nest_level, max_nesting, defining_parameters) {
+            if let Some(found) = Self::descend_and_resolve(name, table, current_nest_level, max_nesting, defining_parameters) {
+                return Some(found);
+            }
+        }
+
+        Self::find_in_level(name, table, current_nest_level)
+    }
+
+    fn resolve_in_parameters(&self, name: &str) -> Option<(usize, Scope, bool)> {
+        if !self.defining_fn {
+            return None;
+        }
+
+        let Some(TableTypes::Function(f)) = self.table.last() else {
+            return None;
+        };
+        let params = f.parameters.as_ref()?;
+
+        params.iter().enumerate().find_map(|(idx, entry)| match entry {
+            TableTypes::Variable(v) if v.name.as_deref() == Some(name) => Some((idx, Scope::Parameter, false)),
+            _ => None,
+        })
     }
 
     fn add_entry(&mut self, token: TokenType) {
