@@ -32,14 +32,11 @@ impl Types for Variable {
     }
 
     fn add_arguments(&mut self, argument: String) {
-        if !Variable::is_valid_argument(argument.clone()) {
-            return;
-        }
-
         if self.name == None {
             self.name = Some(argument);
         } else {
-            self.value = Some(argument);
+            *self.value.get_or_insert_with(String::new) += &(" ".to_string() + &argument);
+            //self.value = Some(argument);
         }
     }
 }
@@ -168,6 +165,42 @@ pub struct Conditional {
 }
 
 impl Types for Conditional {
+    fn new(_: TokenType) -> Self {
+        Self {
+            condition: vec![],
+            table: vec![],
+        }
+    }
+
+    fn is_valid_argument(_: String) -> bool {
+        true
+    }
+
+    fn finished_definition(&self) -> bool {
+        self.condition.len() > 0
+    }
+
+    fn add_arguments(&mut self, argument: String) {
+        if !FunctionCall::is_valid_argument(argument.clone()) {
+            return;
+        }
+
+        let mut table_type = TableTypes::from_token(TokenType::from_str(&argument));
+
+        if let TableTypes::Variable(ref mut v) = table_type {
+            v.value = Some(argument);
+        }
+        self.condition.push(table_type); 
+    }
+} 
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct Loop {
+    pub condition: Vec<TableTypes>,
+    pub table: Vec<TableTypes>,
+}
+
+impl Types for Loop {
     fn new(_: TokenType) -> Self {
         Self {
             condition: vec![],

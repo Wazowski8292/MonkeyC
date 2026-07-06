@@ -1,5 +1,5 @@
 use crate::parser::{Block, Word};
-use crate::variable_types::{Variable, Function, Reasingment, FunctionCall, Conditional, Types};
+use crate::variable_types::{Variable, Function, Reasingment, FunctionCall, Conditional, Loop, Types};
 use std::vec::Vec;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -16,6 +16,16 @@ pub enum TokenType {
     Plus,
     Minus,
     Equals,
+
+    LogicalEquals,
+    LogicalAnd,
+    LogicalOr,
+    Not,
+
+    RightBitShift,
+    LeftBitShift,
+    And,
+    Or,
     
     IntegerLiteral,
     FloatLiteral,
@@ -24,6 +34,8 @@ pub enum TokenType {
     BoolLiteral,
 
     FnLiteral,
+
+    WhileLoop,
     
     Unknow,
 }
@@ -44,7 +56,19 @@ impl TokenType {
             "-" => TokenType::Minus,
             "=" => TokenType::Equals,
 
+            "==" => TokenType::LogicalEquals,
+            "&&" => TokenType::LogicalAnd,
+            "||" => TokenType::LogicalOr,
+            "!" => TokenType::Not,
+
+            ">>" => TokenType::RightBitShift,
+            "<<" => TokenType::LeftBitShift,
+            "&" => TokenType::And,
+            "|" => TokenType::Or,
+
             "fn" => TokenType::FnLiteral,
+
+            "while" => TokenType::WhileLoop,
 
             _ if s.parse::<i64>().is_ok() => TokenType::IntegerLiteral,
             _ if s.parse::<f64>().is_ok() => TokenType::FloatLiteral,
@@ -59,6 +83,23 @@ impl TokenType {
     pub fn is_value(token: TokenType) -> bool {
         token == TokenType::Unknow || token == TokenType::IntegerLiteral || token == TokenType::FloatLiteral ||
         token == TokenType::BoolLiteral || token ==TokenType::StringLiteral || token ==TokenType::CharLiteral
+    }
+
+    pub fn is_operator(token: TokenType) -> bool {
+        TokenType::is_aritmetic_operator(token.clone()) || TokenType::is_binary_operator(token.clone()) ||
+        TokenType::is_logical_operator(token.clone())
+    }
+
+    pub fn is_logical_operator(token: TokenType) -> bool {
+        token == TokenType::LogicalEquals || token == TokenType::LogicalAnd || token == TokenType::LogicalOr || token == TokenType::Not
+    }
+    
+    pub fn is_aritmetic_operator(token: TokenType) -> bool {
+        token == TokenType::Plus || token == TokenType::Minus || token == TokenType::Equals 
+    }
+
+    pub fn is_binary_operator(token: TokenType) -> bool {
+        token == TokenType::RightBitShift || token == TokenType::LeftBitShift || token == TokenType::And || token == TokenType::Or 
     }
 }
 
@@ -76,6 +117,7 @@ pub enum TableTypes {
     Reasingment(Reasingment),
     FunctionCall(FunctionCall),
     Conditional(Conditional),
+    Loop(Loop),
     Unknown,
 }
 
@@ -85,6 +127,7 @@ impl TableTypes {
             TokenType::Int | TokenType::Float | TokenType::String | TokenType::Bool | TokenType::Char | TokenType::IntegerLiteral | TokenType::FloatLiteral | TokenType::BoolLiteral | TokenType::StringLiteral | TokenType::CharLiteral => TableTypes::Variable(Variable::new(token)),
             TokenType::FnLiteral => TableTypes::Function(Function::new(token)),
             TokenType::If | TokenType::Else => TableTypes::Conditional(Conditional::new(token)),
+            TokenType::WhileLoop => TableTypes::Loop(Loop::new(token)),
             TokenType::Unknow => TableTypes::Reasingment(Reasingment::new(TokenType::Unknow)),
             _ => TableTypes::Unknown,
         }
@@ -97,6 +140,7 @@ impl TableTypes {
             TableTypes::Reasingment(asing) => asing.finished_definition(),
             TableTypes::FunctionCall(fc) => fc.finished_definition(),
             TableTypes::Conditional(con) => con.finished_definition(),
+            TableTypes::Loop(while_loop) => while_loop.finished_definition(),
             _ => {true},
         }
     }
@@ -108,6 +152,7 @@ impl TableTypes {
             TableTypes::Reasingment(reasing) => reasing.add_arguments(argument),
             TableTypes::FunctionCall(fc) => fc.add_arguments(argument),
             TableTypes::Conditional(con) => con.add_arguments(argument),
+            TableTypes::Loop(while_loop) => while_loop.add_arguments(argument),
             _ => {}
         }
     }
@@ -229,7 +274,7 @@ impl SemanticAnalyzer {
         
         let has_child = matches!(
             last_table.last(),
-            Some(TableTypes::Function(_)) | Some(TableTypes::Conditional(_))
+            Some(TableTypes::Function(_)) | Some(TableTypes::Conditional(_)) | Some(TableTypes::Loop(_))
         );
 
         if !has_child || (current_nest_level + 1 > max_nesting ) && !defining_parameters {
@@ -237,7 +282,9 @@ impl SemanticAnalyzer {
         }
 
         if defining_parameters {
-           if let Some(TableTypes::Conditional(_)) = last_table.last() {
+            if let Some(TableTypes::Conditional(_)) = last_table.last() {
+                return last_table;
+            } else if let Some(TableTypes::Loop(_)) = last_table.last() {
                 return last_table;
             }
         }
@@ -253,6 +300,9 @@ impl SemanticAnalyzer {
             TableTypes::Conditional(con) => {
                 Self::desend_table(defining_parameters, &mut con.table, current_nest_level + 1, max_nesting)
             },
+            TableTypes::Loop(while_loop) => {
+                Self::desend_table(defining_parameters, &mut while_loop.table, current_nest_level + 1, max_nesting)
+            },
             _ => unreachable!(),
         }
     }
@@ -260,8 +310,9 @@ impl SemanticAnalyzer {
     fn tokenize_word(&mut self, word: Word) {
         let token = TokenType::from_str(&word.word);
 
+        self.set_value |= TokenType::is_operator(token.clone());
+
         if token == TokenType::Equals {
-            self.set_value = true;
             return;
         }
 
@@ -318,7 +369,7 @@ impl SemanticAnalyzer {
     }
 
     fn handle_argument(&mut self, word: Word, token: TokenType, index: Option<(usize, Scope, bool)>, in_reasignment: bool, in_function_call: bool, expected_fc_params: usize, fc_params_len: usize) {
-        self.set_value = false;
+        self.set_value &= TokenType::is_operator(token.clone());
         let in_call_or_reasign = in_reasignment || in_function_call;
 
         if in_function_call && fc_params_len >= expected_fc_params {

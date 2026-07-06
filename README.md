@@ -62,14 +62,17 @@
 
 ## Todo
 
+- [x] Add oparetors
+    -> [x] Arirmetic operators    
+    -> [x] logical operators    
+    -> [x] binary operators
 - [ ] Make function parameter actually do something(do checks)
     -> [x] Do parameter amount checks
     -> [ ] Do parameter type checks
 - [ ] Add loops
-- [ ] Add oparetors
-    -> [ ] Arirmetic operators    
-    -> [ ] logical operators    
-    -> [ ] binary operators
+    -> [x] Add while loop
+    -> [ ] Add for loop
+- [ ] Check if the operator make sense
 - [ ] Rewrite the hole TypeTable but in a simple programming language similar to assembly
 
 ---
