@@ -38,7 +38,6 @@
     ```
 
 ---
-
 ## Token types
 > Not every token is fully implemented yet
 
@@ -49,31 +48,55 @@
 | `INT` | `int` | Integer |
 | `FLOAT` | `float` | Float |
 | `BOOL` | `bool` | Boolean |
+| `CHAR` | `char` | Character |
 | `STRING` | `string` | String |
 | `PLUS` | `+` | Addition |
 | `MINUS` | `-` | Subtraction |
+| `MULTIPLICATION` | `*` | Multiplication |
+| `DIVISION` | `/` | Division |
 | `EQUALS` | `=` | Assignment |
-| `INTEGER_LITERAL` | `0–9…` | Interger literal |
-| `FLOAT_LITERAL` | `0–9.0…` | Floating point integers literal |
+| `LOGICAL_EQUALS` | `==` | Equality comparison |
+| `LOGICAL_AND` | `&&` | Logical AND |
+| `LOGICAL_OR` | `\|\|` | Logical OR |
+| `NOT` | `!` | Logical negation |
+| `RIGHT_BIT_SHIFT` | `>>` | Bitwise right shift |
+| `LEFT_BIT_SHIFT` | `<<` | Bitwise left shift |
+| `AND` | `&` | Bitwise AND |
+| `OR` | `\|` | Bitwise OR |
+| `INTEGER_LITERAL` | `0–9…` | Integer literal |
+| `FLOAT_LITERAL` | `0–9.0…` | Floating point literal |
+| `CHAR_LITERAL` | `'a'…` | Character literal |
+| `STRING_LITERAL` | `"…"` | String literal |
+| `BOOL_LITERAL` | `true`/`false` | Boolean literal |
 | `FN` | `fn` | Function |
+| `WHILE_LOOP` | `while` | While loop |
+| `UNKNOW` | — | Unknown token |
+| `EQUALS` | `=` | Assignment |
+| `LOGICAL_EQUALS` | `==` | Equality comparison |
+| `LOGICAL_AND` | `&&` | Logical AND |
+| `LOGICAL_OR` | `\|\|` | Logical OR |
+| `NOT` | `!` | Logical negation |
+| `RIGHT_BIT_SHIFT` | `>>` | Bitwise right shift |
+| `LEFT_BIT_SHIFT` | `<<` | Bitwise left shift |
+| `AND` | `&` | Bitwise AND |
+| `OR` | `\|` | Bitwise OR |
+| `INTEGER_LITERAL` | `0–9…` | Integer literal |
+| `FLOAT_LITERAL` | `0–9.0…` | Floating point literal |
+| `CHAR_LITERAL` | `'a'…` | Character literal |
+| `STRING_LITERAL` | `"…"` | String literal |
+| `BOOL_LITERAL` | `true`/`false` | Boolean literal |
+| `FN` | `fn` | Function |
+| `WHILE_LOOP` | `while` | While loop |
 | `UNKNOW` | — | Unknown token |
 
 ---
 
 ## Todo
 
-- [x] Add oparetors
-    -> [x] Arirmetic operators    
-    -> [x] logical operators    
-    -> [x] binary operators
-- [ ] Make function parameter actually do something(do checks)
-    -> [x] Do parameter amount checks
-    -> [ ] Do parameter type checks
-- [ ] Add loops
-    -> [x] Add while loop
-    -> [ ] Add for loop
-- [ ] Check if the operator make sense
 - [ ] Rewrite the hole TypeTable but in a simple programming language similar to assembly
+- [ ] Do parameter type checks
+- [ ] Add for loop
+- [ ] Check if the operator make sense
 
 ---
 

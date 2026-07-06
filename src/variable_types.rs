@@ -108,16 +108,13 @@ impl Types for Reasingment {
     }
 
     fn add_arguments(&mut self, argument: String) {
-        if !Reasingment::is_valid_argument(argument.clone()) {
-            return;
-        }
-
         let mut table_type = TableTypes::from_token(TokenType::from_str(&argument));
 
         if let TableTypes::Variable(ref mut v) = table_type {
             v.value = Some(argument);
         }
         self.parameters.get_or_insert_with(Vec::new).push(table_type); 
+//            *self.parameters.get_or_insert_with(String::new) += &(" ".to_string() + &argument);
     }
 }
 

@@ -15,6 +15,8 @@ pub enum TokenType {
 
     Plus,
     Minus,
+    Multiplication,
+    Division,
     Equals,
 
     LogicalEquals,
@@ -54,6 +56,8 @@ impl TokenType {
 
             "+" => TokenType::Plus,
             "-" => TokenType::Minus,
+            "*" => TokenType::Multiplication,
+            "/" => TokenType::Division,
             "=" => TokenType::Equals,
 
             "==" => TokenType::LogicalEquals,
@@ -95,7 +99,7 @@ impl TokenType {
     }
     
     pub fn is_aritmetic_operator(token: TokenType) -> bool {
-        token == TokenType::Plus || token == TokenType::Minus || token == TokenType::Equals 
+        token == TokenType::Plus || token == TokenType::Minus || token == TokenType::Multiplication || token == TokenType::Division || token == TokenType::Equals 
     }
 
     pub fn is_binary_operator(token: TokenType) -> bool {
@@ -123,8 +127,12 @@ pub enum TableTypes {
 
 impl TableTypes {
     pub fn from_token(token: TokenType) -> Self{
+        if TokenType::is_operator(token.clone()) {
+            return TableTypes::Variable(Variable::new(token));
+        }
+
         match token {
-            TokenType::Int | TokenType::Float | TokenType::String | TokenType::Bool | TokenType::Char | TokenType::IntegerLiteral | TokenType::FloatLiteral | TokenType::BoolLiteral | TokenType::StringLiteral | TokenType::CharLiteral => TableTypes::Variable(Variable::new(token)),
+            TokenType::Int | TokenType::Float | TokenType::String | TokenType::Bool | TokenType::Char | TokenType::IntegerLiteral | TokenType::FloatLiteral | TokenType::BoolLiteral | TokenType::StringLiteral | TokenType::CharLiteral  => TableTypes::Variable(Variable::new(token)),
             TokenType::FnLiteral => TableTypes::Function(Function::new(token)),
             TokenType::If | TokenType::Else => TableTypes::Conditional(Conditional::new(token)),
             TokenType::WhileLoop => TableTypes::Loop(Loop::new(token)),
@@ -438,27 +446,24 @@ impl SemanticAnalyzer {
         };
         new_entry.add_arguments(word.word.clone());
         
-        if let Some((idx, scope, is_func)) = index {
-            let last_param = match new_entry {
-                TableTypes::Reasingment(r) => r.parameters.as_mut().and_then(|p| p.last_mut()),
-                TableTypes::FunctionCall(fc) => fc.parameters.as_mut().and_then(|p| p.last_mut()),
-                _ => None,
-            };
+        Self::add_caller_info(new_entry, index);
+    }
 
-            if let Some(last) = last_param {
-                if let TableTypes::Reasingment(v) = last {
-                    if is_func {
-                        *last = TableTypes::FunctionCall(FunctionCall {
-                            target: idx,
-                            target_scope: scope,
-                            parameters: None,
-                        });
-                    } else {
-                        v.target = idx;
-                        v.target_scope = scope;
-                    }
-                }
-            }
+    fn add_caller_info(new_entry: &mut TableTypes, index: Option<(usize, Scope, bool)>) {
+        let Some((idx, scope, is_func)) = index else { return };
+        let TableTypes::FunctionCall(fc) = new_entry else { return };
+        let Some(last) = fc.parameters.as_mut().and_then(|p| p.last_mut()) else { return };
+        let TableTypes::Reasingment(v) = last else { return };
+
+        if is_func {
+            *last = TableTypes::FunctionCall(FunctionCall {
+                target: idx,
+                target_scope: scope,
+                parameters: None,
+            });
+        } else {
+            v.target = idx;
+            v.target_scope = scope;
         }
     }
 
