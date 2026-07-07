@@ -1,6 +1,6 @@
 <div align="center">
 
-# MonkeyC
+# monkey_c
 
 </div>
 
@@ -29,8 +29,8 @@
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/Magicchess1244/MonkeyC.git
-   cd MonkeyC
+   git clone https://github.com/Magicchess1244/monkey_c.git
+   cd monkey_c
    ```
 2. **Compil the code**
     ```bash

@@ -502,10 +502,12 @@ impl SemanticAnalyzer {
     }
 }
 
-pub fn analyze_semantically(stack: Vec<Block>) {
+pub fn analyze_semantically(stack: Vec<Block>) -> Vec<TableTypes>{
     let mut semantic_analyzer: SemanticAnalyzer = SemanticAnalyzer::new();
     semantic_analyzer.analyze(stack);
+    
+    semantic_analyzer.table
 
-    println!("Semantic analyzer table: {:#?}", semantic_analyzer.table);
-    println!("Semantic analyzer erros msg: {:#?}", semantic_analyzer.error_messages);
+    //println!("Semantic analyzer table: {:#?}", semantic_analyzer.table);
+    //println!("Semantic analyzer erros msg: {:#?}", semantic_analyzer.error_messages);
 }

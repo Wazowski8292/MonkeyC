@@ -10,7 +10,7 @@ pub trait Types {
 #[derive(Debug, PartialEq, Clone)]
 pub struct Variable {
     pub token_type: TokenType,
-    pub value: Option<String>,
+    pub value: Option<Vec<String>>,
     pub name: Option<String>,
 }
 
@@ -35,8 +35,7 @@ impl Types for Variable {
         if self.name == None {
             self.name = Some(argument);
         } else {
-            *self.value.get_or_insert_with(String::new) += &(" ".to_string() + &argument);
-            //self.value = Some(argument);
+            self.value.get_or_insert_with(Vec::new).push(argument);
         }
     }
 }
@@ -76,7 +75,7 @@ impl Types for Function {
             let mut table_type = TableTypes::from_token(TokenType::from_str(&argument));
 
             if let TableTypes::Variable(ref mut v) = table_type {
-                v.value = Some(argument);
+                v.value.get_or_insert_with(Vec::new).push(argument);
             }
             self.parameters.get_or_insert_with(Vec::new).push(table_type); 
         }
@@ -104,17 +103,16 @@ impl Types for Reasingment {
     }
     
     fn finished_definition(&self) -> bool {
-        self.parameters.clone().map_or(0, |p| p.len()) >= 0
+        self.parameters.clone().map_or(true, |p| !p.is_empty())
     }
 
     fn add_arguments(&mut self, argument: String) {
         let mut table_type = TableTypes::from_token(TokenType::from_str(&argument));
 
         if let TableTypes::Variable(ref mut v) = table_type {
-            v.value = Some(argument);
+            v.value.get_or_insert_with(Vec::new).push(argument);
         }
         self.parameters.get_or_insert_with(Vec::new).push(table_type); 
-//            *self.parameters.get_or_insert_with(String::new) += &(" ".to_string() + &argument);
     }
 }
 
@@ -149,7 +147,7 @@ impl Types for FunctionCall {
         let mut table_type = TableTypes::from_token(TokenType::from_str(&argument));
 
         if let TableTypes::Variable(ref mut v) = table_type {
-            v.value = Some(argument);
+            v.value.get_or_insert_with(Vec::new).push(argument);
         }
         self.parameters.get_or_insert_with(Vec::new).push(table_type); 
     }
@@ -185,7 +183,7 @@ impl Types for Conditional {
         let mut table_type = TableTypes::from_token(TokenType::from_str(&argument));
 
         if let TableTypes::Variable(ref mut v) = table_type {
-            v.value = Some(argument);
+            v.value.get_or_insert_with(Vec::new).push(argument);
         }
         self.condition.push(table_type); 
     }
@@ -221,7 +219,7 @@ impl Types for Loop {
         let mut table_type = TableTypes::from_token(TokenType::from_str(&argument));
 
         if let TableTypes::Variable(ref mut v) = table_type {
-            v.value = Some(argument);
+            v.value.get_or_insert_with(Vec::new).push(argument);
         }
         self.condition.push(table_type); 
     }
