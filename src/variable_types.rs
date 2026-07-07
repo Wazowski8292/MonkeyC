@@ -161,8 +161,11 @@ pub struct Conditional {
 
 impl Types for Conditional {
     fn new(_: TokenType) -> Self {
+        let mut var = Variable::new(TokenType::BoolLiteral);
+        var.name = Some("_".to_string());
+
         Self {
-            condition: vec![],
+            condition: vec![TableTypes::Variable(var)],
             table: vec![],
         }
     }
@@ -172,20 +175,17 @@ impl Types for Conditional {
     }
 
     fn finished_definition(&self) -> bool {
-        self.condition.len() > 0
+        false
     }
 
     fn add_arguments(&mut self, argument: String) {
-        if !FunctionCall::is_valid_argument(argument.clone()) {
+        if !Conditional::is_valid_argument(argument.clone()) {
             return;
         }
 
-        let mut table_type = TableTypes::from_token(TokenType::from_str(&argument));
-
-        if let TableTypes::Variable(ref mut v) = table_type {
-            v.value.get_or_insert_with(Vec::new).push(argument);
+        if let Some(TableTypes::Variable(v)) = self.condition.last_mut() {
+            v.add_arguments(argument);
         }
-        self.condition.push(table_type); 
     }
 } 
 
@@ -197,8 +197,11 @@ pub struct Loop {
 
 impl Types for Loop {
     fn new(_: TokenType) -> Self {
+        let mut var = Variable::new(TokenType::BoolLiteral);
+        var.name = Some("_".to_string());
+
         Self {
-            condition: vec![],
+            condition: vec![TableTypes::Variable(var)],
             table: vec![],
         }
     }
@@ -208,19 +211,16 @@ impl Types for Loop {
     }
 
     fn finished_definition(&self) -> bool {
-        self.condition.len() > 0
+        false
     }
 
     fn add_arguments(&mut self, argument: String) {
-        if !FunctionCall::is_valid_argument(argument.clone()) {
+        if !Loop::is_valid_argument(argument.clone()) {
             return;
         }
 
-        let mut table_type = TableTypes::from_token(TokenType::from_str(&argument));
-
-        if let TableTypes::Variable(ref mut v) = table_type {
-            v.value.get_or_insert_with(Vec::new).push(argument);
+        if let Some(TableTypes::Variable(v)) = self.condition.last_mut() {
+            v.add_arguments(argument);
         }
-        self.condition.push(table_type); 
     }
 } 

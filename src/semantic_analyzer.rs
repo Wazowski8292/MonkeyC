@@ -337,7 +337,7 @@ impl SemanticAnalyzer {
             return last_table;
         }
 
-        if defining_parameters {
+        if defining_parameters && max_nesting == current_nest_level{
             if let Some(TableTypes::Conditional(_)) = last_table.last() {
                 return last_table;
             } else if let Some(TableTypes::Loop(_)) = last_table.last() {
@@ -508,7 +508,9 @@ pub fn analyze_semantically(stack: Vec<Block>) -> Vec<TableTypes>{
     
 
     println!("Semantic analyzer table: {:#?}", semantic_analyzer.table);
-    //println!("Semantic analyzer erros msg: {:#?}", semantic_analyzer.error_messages);
+    if semantic_analyzer.error_messages.len() > 0 {
+        println!("Semantic analyzer erros msg: {:#?}", semantic_analyzer.error_messages);
+    }
 
     semantic_analyzer.table
 }

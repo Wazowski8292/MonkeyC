@@ -267,7 +267,13 @@ impl ThreeAddressCodeGenerator {
     }
  
     fn add_variable(&mut self, variable: Variable) {
-        let name = variable.name.unwrap_or_default();
+        let name;
+        if variable.name == Some("_".to_string()) {
+            name = self.next_temp();
+        } else {
+            name = variable.name.unwrap_or_default();
+        }
+
         let tokens = variable.value.unwrap_or_default();
         self.build_expression_chain(tokens, Some(name), Type::Variable);
     }
@@ -302,55 +308,35 @@ impl ThreeAddressCodeGenerator {
     }
  
     fn add_conditional(&mut self, conditional: Conditional) {
-        let label = self.next_label();
-
-        let tokens: Vec<String> = conditional
-            .condition
-            .iter()
-            .map(Self::extract_operand)
-            .collect();
- 
-        let cond_result = self.build_expression_chain(tokens, None, Type::Conditional);
- 
-        self.tac_table.push(Tac {
-            tac_type: Type::Conditional,
-            arguments: vec![label.clone(), cond_result.unwrap_or_default()],
-            operator: None,
-            result: None,
-        });
- 
-        self.generate(conditional.table);
-
-        self.tac_table.push(Tac {
-            tac_type: Type::ConditionalEnd,
-            arguments: vec![label],
-            operator: None,
-            result: None,
-        });
+        self.add_conditional_block(Type::Conditional, Type::ConditionalEnd, conditional.condition, conditional.table);
     }
  
     fn add_loop(&mut self, loop_node: Loop) {
+        self.add_conditional_block(Type::Loop, Type::LoopEnd, loop_node.condition, loop_node.table);
+    }
+
+    fn add_conditional_block(&mut self, start: Type, end: Type, condition: Vec<TableTypes>, table: Vec<TableTypes>) {
         let label = self.next_label();
 
-        let tokens: Vec<String> = loop_node
-            .condition
-            .iter()
-            .map(Self::extract_operand)
-            .collect();
- 
-        let cond_result = self.build_expression_chain(tokens, None, Type::Loop);
- 
-        self.tac_table.push(Tac {
-            tac_type: Type::Loop,
-            arguments: vec![label.clone(), cond_result.unwrap_or_default()],
-            operator: None,
+        let mut tac = Tac {
+            tac_type: start,
             result: None,
-        });
+            arguments: vec![label.clone()],
+            operator: None,
+        };
+
+        if let Some(TableTypes::Variable(var)) = condition.first() {
+            self.add_variable(var.clone());
+            
+            tac.arguments.push(self.tac_table.last().unwrap().result.clone().unwrap_or("0".to_string()));
+        }
+
+        self.tac_table.push(tac);
  
-        self.generate(loop_node.table);
+        self.generate(table);
 
         self.tac_table.push(Tac {
-            tac_type: Type::LoopEnd,
+            tac_type: end,
             arguments: vec![label],
             operator: None,
             result: None,
@@ -397,7 +383,9 @@ impl ThreeAddressCodeGenerator {
             }
             Type::Conditional => {
                 let label = tac.arguments.get(0).map(String::as_str).unwrap_or("?");
-                let cond = tac.arguments.get(1).map(String::as_str).unwrap_or("?");
+                //let cond = tac.arguments.get(1).map(String::as_str).unwrap_or("?");
+                let cond = tac.arguments.get(1..).unwrap_or(&[]).join(", ");
+
                 format!("{pad}{label}: if ({cond})")
             }
             Type::ConditionalEnd => {
@@ -426,5 +414,6 @@ impl ThreeAddressCodeGenerator {
 pub fn generate_three_address_code(type_table: Vec<TableTypes>) {
     let mut generator = ThreeAddressCodeGenerator::new();
     generator.generate(type_table);
-    //generator.print();
+    generator.print();
+    //println!("{:#?}", generator.tac_table);
 }
