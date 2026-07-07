@@ -46,6 +46,25 @@ impl Operator {
             _ => Operator::Unknow
         }
     }
+
+    fn as_str(&self) -> &'static str {
+        match self {
+            Operator::Plus => "+",
+            Operator::Minus => "-",
+            Operator::Multiplication => "*",
+            Operator::Division => "/",
+            Operator::Equals => "=",
+            Operator::LogicalEquals => "==",
+            Operator::LogicalAnd => "&&",
+            Operator::LogicalOr => "||",
+            Operator::Not => "!",
+            Operator::RightBitShift => ">>",
+            Operator::LeftBitShift => "<<",
+            Operator::And => "&",
+            Operator::Or => "|",
+            Operator::Unknow => "?",
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -337,11 +356,75 @@ impl ThreeAddressCodeGenerator {
             result: None,
         });
     }
-}
 
+    pub fn print(&self) {
+        let mut indent: usize = 0;
+ 
+        for tac in &self.tac_table {
+            if matches!(tac.tac_type, Type::FunctionEnd | Type::LoopEnd | Type::ConditionalEnd ) {
+                indent = indent.saturating_sub(1);
+            }
+ 
+            let pad = "    ".repeat(indent);
+            println!("{}", Self::format_tac(tac, &pad));
+ 
+            if matches!( tac.tac_type, Type::Function | Type::Loop | Type::Conditional ) {
+                indent += 1;
+            }
+        }
+    }
+ 
+    fn format_tac(tac: &Tac, pad: &str) -> String {
+        match &tac.tac_type {
+            Type::Function => {
+                let label = tac.arguments.get(0).map(String::as_str).unwrap_or("?");
+                let name = tac.arguments.get(1).map(String::as_str).unwrap_or("?");
+                let params = tac.arguments.get(2..).unwrap_or(&[]).join(", ");
+                format!("{pad}{label}: function {name}({params})")
+            }
+            Type::FunctionEnd => {
+                let label = tac.arguments.get(0).map(String::as_str).unwrap_or("?");
+                format!("{pad}{label}: end function")
+            }
+            Type::Loop => {
+                let label = tac.arguments.get(0).map(String::as_str).unwrap_or("?");
+                let cond = tac.arguments.get(1).map(String::as_str).unwrap_or("?");
+                format!("{pad}{label}: while ({cond})")
+            }
+            Type::LoopEnd => {
+                let label = tac.arguments.get(0).map(String::as_str).unwrap_or("?");
+                format!("{pad}{label}: end while")
+            }
+            Type::Conditional => {
+                let label = tac.arguments.get(0).map(String::as_str).unwrap_or("?");
+                let cond = tac.arguments.get(1).map(String::as_str).unwrap_or("?");
+                format!("{pad}{label}: if ({cond})")
+            }
+            Type::ConditionalEnd => {
+                let label = tac.arguments.get(0).map(String::as_str).unwrap_or("?");
+                format!("{pad}{label}: end if")
+            }
+            Type::Call => {
+                let target = tac.arguments.get(0).map(String::as_str).unwrap_or("?");
+                let args = tac.arguments.get(1..).unwrap_or(&[]).join(", ");
+                format!("{pad}call {target}({args})")
+            }
+            Type::Variable | Type::Reasingment => {
+                let result = tac.result.as_deref().unwrap_or("?");
+                match (&tac.operator, tac.arguments.as_slice()) {
+                    (Some(op), [left, right]) => {
+                        format!("{pad}{result} = {left} {} {right}", op.as_str())
+                    }
+                    (None, [value]) => format!("{pad}{result} = {value}"),
+                    _ => format!("{pad}{result} = {:?}", tac.arguments),
+                }
+            }
+        }
+    }
+}
+ 
 pub fn generate_three_address_code(type_table: Vec<TableTypes>) {
     let mut generator = ThreeAddressCodeGenerator::new();
     generator.generate(type_table);
-
-    println!("TAC table: {:#?}", generator.tac_table);
+    //generator.print();
 }

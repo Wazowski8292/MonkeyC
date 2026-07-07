@@ -16,8 +16,10 @@ fn main() {
     }
 
     println!("Analyzing semanticly...");
-
     let type_table = analyze_semantically(parsed_text.expect("parsing failed"));
+
+    println!("Translating into a three address code...");
+
     generate_three_address_code(type_table);
 }
 
