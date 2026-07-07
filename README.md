@@ -93,7 +93,9 @@
 
 ## Todo
 
-- [ ] Rewrite the hole TypeTable but in a simple programming language similar to assembly
+- [x] Rewrite the hole TypeTable but in a simple programming language similar to assembly
+- [ ] Pass the code to assembly
+- [ ] Actually compile automaticly
 - [ ] Do parameter type checks
 - [ ] Add for loop
 - [ ] Check if the operator make sense
@@ -102,8 +104,6 @@
 
 ## Long tenm goals
 
-- [ ] Pass the code to assembly
-- [ ] Actually compile
 - [ ] Add a simple standar library
 
 
