@@ -2,6 +2,7 @@ use std::env;
 use monkey_c::parser::parse_text;
 use monkey_c::semantic_analyzer::analyze_semantically;
 use monkey_c::three_address_code_gen::generate_three_address_code;
+use monkey_c::code_generator::generate_assembly;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -19,8 +20,10 @@ fn main() {
     let type_table = analyze_semantically(parsed_text.expect("parsing failed"));
 
     println!("Translating into a three address code...");
+    let tac = generate_three_address_code(type_table);
 
-    generate_three_address_code(type_table);
+    println!("Translating into assembly...");
+    generate_assembly(tac);
 }
 
 fn check_args(args: Vec<String>) {

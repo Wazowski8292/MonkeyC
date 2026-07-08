@@ -507,7 +507,7 @@ pub fn analyze_semantically(stack: Vec<Block>) -> Vec<TableTypes>{
     semantic_analyzer.analyze(stack);
     
 
-    println!("Semantic analyzer table: {:#?}", semantic_analyzer.table);
+    //println!("Semantic analyzer table: {:#?}", semantic_analyzer.table);
     if semantic_analyzer.error_messages.len() > 0 {
         println!("Semantic analyzer erros msg: {:#?}", semantic_analyzer.error_messages);
     }

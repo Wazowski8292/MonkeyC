@@ -4,7 +4,7 @@ use crate::semantic_analyzer::{TableTypes, Scope};
 use std::vec::Vec;
 
 #[derive(Debug, Clone)]
-enum Operator {
+pub enum Operator {
     Plus,
     Minus,
     Multiplication,
@@ -65,10 +65,23 @@ impl Operator {
             Operator::Unknow => "?",
         }
     }
+
+    pub fn to_asm(&self) -> Option<&'static str> {
+        match self {
+            Operator::Plus => Some("add"),
+            Operator::Minus => Some("sub"),
+            Operator::Multiplication => Some("imul"),
+            Operator::RightBitShift => Some("sar"),
+            Operator::LeftBitShift => Some("shl"),
+            Operator::And => Some("and"),
+            Operator::Or => Some("or"),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
-enum Type {
+pub enum Type {
     Function,
     FunctionEnd,
     Variable,
@@ -81,11 +94,11 @@ enum Type {
 }
 
 #[derive(Debug, Clone)]
-struct Tac {
-    tac_type: Type,
-    arguments: Vec<String>,
-    operator: Option<Operator>,
-    result: Option<String>,
+pub struct Tac {
+    pub tac_type: Type,
+    pub arguments: Vec<String>,
+    pub operator: Option<Operator>,
+    pub result: Option<String>,
 }
 
 struct ThreeAddressCodeGenerator {
@@ -411,9 +424,10 @@ impl ThreeAddressCodeGenerator {
     }
 }
  
-pub fn generate_three_address_code(type_table: Vec<TableTypes>) {
+pub fn generate_three_address_code(type_table: Vec<TableTypes>) -> Vec<Tac>{
     let mut generator = ThreeAddressCodeGenerator::new();
     generator.generate(type_table);
     generator.print();
-    //println!("{:#?}", generator.tac_table);
+
+    generator.tac_table
 }

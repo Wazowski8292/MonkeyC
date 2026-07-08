@@ -99,7 +99,8 @@
 - [ ] Do parameter type checks
 - [ ] Add for loop
 - [ ] Check if the operator make sense
-
+- [ ] Precompile operations is posible
+ 
 ---
 
 ## Long tenm goals
