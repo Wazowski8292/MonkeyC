@@ -2,6 +2,8 @@ use std::vec::Vec;
 use std::collections::HashMap;
 use crate::three_address_code_gen::{Tac, Type};
 
+const ARG_REGS: [&str; 6] = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"];
+
 enum Slot {
     Mem(i32),
     Const(String),
@@ -35,6 +37,8 @@ impl CodeGen {
         for tac in tac_table.iter() {
             match tac.tac_type {
                 Type::Variable => self.add_variable(tac),
+                Type::Function => self.add_function(tac),
+                Type::Call => self.add_function_call(tac),
                 _ => {}
             }
         }
@@ -91,6 +95,59 @@ impl CodeGen {
                 self.code_gen_bin_op(op.to_asm().unwrap(), a_slot, b_slot, t_offset);
             }
         }
+    }
+
+    fn add_function(&mut self, function: &Tac) {
+        let name = function.arguments.get(1).map(String::as_str).unwrap_or("?");
+        let params: Vec<String> = function.arguments.iter().skip(2).cloned().collect();
+
+        if name == "main" {
+            self.emit_label("_start");
+        } else {
+            self.emit_label(name);
+        }
+
+        self.emit("    push rbp");
+        self.emit("    mov rbp, rsp");
+        self.emit("    sub rsp, 128"); // Should not use fix size block. TODO: Dinimaic Size block
+        self.emit("");
+
+        for (i, param_name) in params.iter().enumerate() {
+            if i >= ARG_REGS.len() {
+                break;  // TODO: Need to implement this. 
+            }
+            let slot = self.get_or_alloc_slot(param_name);
+            let offset = match slot {
+                Slot::Mem(off) => off,
+                Slot::Const(_) => unreachable!("param name should never be a constant"),
+            };
+            self.emit(&format!("    mov [rbp - {}], {}", offset, ARG_REGS[i]));
+        }
+        self.emit("");
+    }
+
+    fn add_function_call(&mut self, call: &Tac) {
+        let name = call.arguments.get(0).map(String::as_str).unwrap_or("?");
+        let arg_names: Vec<String> = call.arguments.iter().skip(1).cloned().collect();
+
+        for (i, arg_name) in arg_names.iter().enumerate() {
+            if i >= ARG_REGS.len() {
+                break; // TODO: Need to implement the ability to pass more parameters
+            }
+            let slot = self.get_or_alloc_slot(arg_name);
+            self.emit(&format!("    mov {}, {}", ARG_REGS[i], slot.to_asm()));
+        }
+
+        self.emit(&format!("    call {}", name));
+        self.emit("");
+    }
+
+    // Returns values
+    fn add_epilogue(&mut self) {
+        self.emit("    mov rsp, rbp");
+        self.emit("    pop rbp");
+        self.emit("    ret");
+        self.emit("");
     }
 }
 

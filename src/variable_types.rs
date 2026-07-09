@@ -121,6 +121,7 @@ pub struct FunctionCall {
     pub target: usize,
     pub target_scope: Scope,
     pub parameters: Option<Vec<TableTypes>>,
+    pub name: String,
 }
 
 impl Types for FunctionCall {
@@ -129,6 +130,7 @@ impl Types for FunctionCall {
             target: 0,
             target_scope: Scope::Root,
             parameters: None,
+            name: String::new(),
         }
     }
     fn is_valid_argument(arg: String) -> bool {

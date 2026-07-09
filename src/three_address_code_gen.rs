@@ -292,12 +292,12 @@ impl ThreeAddressCodeGenerator {
     }
  
     fn add_function_call(&mut self, call: FunctionCall) {
-        let target_ref = Self::symbol_ref(call.target, &call.target_scope);
- 
+        //let target_ref = Self::symbol_ref(call.target, &call.target_scope);
+        
         let mut tac = Tac {
             tac_type: Type::Call,
             result: None,
-            arguments: vec![target_ref],
+            arguments: vec![call.name],
             operator: None,
         };
  
@@ -340,6 +340,11 @@ impl ThreeAddressCodeGenerator {
 
         if let Some(TableTypes::Variable(var)) = condition.first() {
             self.add_variable(var.clone());
+            
+            tac.arguments.push(self.tac_table.last().unwrap().result.clone().unwrap_or("0".to_string()));
+        } else if let Some(TableTypes::Reasingment(re)) = condition.first() {
+            
+            self.add_reasingment(re.clone());
             
             tac.arguments.push(self.tac_table.last().unwrap().result.clone().unwrap_or("0".to_string()));
         }
@@ -396,7 +401,6 @@ impl ThreeAddressCodeGenerator {
             }
             Type::Conditional => {
                 let label = tac.arguments.get(0).map(String::as_str).unwrap_or("?");
-                //let cond = tac.arguments.get(1).map(String::as_str).unwrap_or("?");
                 let cond = tac.arguments.get(1..).unwrap_or(&[]).join(", ");
 
                 format!("{pad}{label}: if ({cond})")

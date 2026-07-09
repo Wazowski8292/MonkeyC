@@ -93,8 +93,11 @@
 
 ## Todo
 
-- [x] Rewrite the hole TypeTable but in a simple programming language similar to assembly
-- [ ] Pass the code to assembly
+- [x] Call functions
+- [x] Pass parameters
+- [ ] Add conditionals
+- [ ] Add loop
+
 - [ ] Actually compile automaticly
 - [ ] Do parameter type checks
 - [ ] Add for loop

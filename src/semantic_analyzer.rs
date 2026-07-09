@@ -446,10 +446,10 @@ impl SemanticAnalyzer {
         };
         new_entry.add_arguments(word.word.clone());
         
-        Self::add_caller_info(new_entry, index);
+        Self::add_caller_info(new_entry, index, word.word);
     }
 
-    fn add_caller_info(new_entry: &mut TableTypes, index: Option<(usize, Scope, bool)>) {
+    fn add_caller_info(new_entry: &mut TableTypes, index: Option<(usize, Scope, bool)>, word: String) {
         let Some((idx, scope, is_func)) = index else { return };
         let TableTypes::FunctionCall(fc) = new_entry else { return };
         let Some(last) = fc.parameters.as_mut().and_then(|p| p.last_mut()) else { return };
@@ -460,6 +460,7 @@ impl SemanticAnalyzer {
                 target: idx,
                 target_scope: scope,
                 parameters: None,
+                name: word,
             });
         } else {
             v.target = idx;
@@ -480,6 +481,7 @@ impl SemanticAnalyzer {
                     target: idx,
                     target_scope: scope,
                     parameters: None,
+                    name: word.word,
                 };
                 self.active_table().push(TableTypes::FunctionCall(func_call));
             } else {
@@ -507,7 +509,7 @@ pub fn analyze_semantically(stack: Vec<Block>) -> Vec<TableTypes>{
     semantic_analyzer.analyze(stack);
     
 
-    //println!("Semantic analyzer table: {:#?}", semantic_analyzer.table);
+    println!("Semantic analyzer table: {:#?}", semantic_analyzer.table);
     if semantic_analyzer.error_messages.len() > 0 {
         println!("Semantic analyzer erros msg: {:#?}", semantic_analyzer.error_messages);
     }
