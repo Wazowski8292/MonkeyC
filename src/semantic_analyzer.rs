@@ -249,7 +249,11 @@ impl SemanticAnalyzer {
     }
 
     fn scope_for_level(nest_level: usize) -> Scope {
-        if nest_level == 0 { Scope::Root } else { Scope::Function }
+        if nest_level == 0 { 
+            Scope::Root 
+        } else {
+            Scope::Function 
+        }
     }
 
     fn should_descend(table: &Vec<TableTypes>, current_nest_level: usize, max_nesting: usize, defining_parameters: bool) -> bool {
@@ -489,6 +493,7 @@ impl SemanticAnalyzer {
                     target: idx,
                     target_scope: scope,
                     parameters: None,
+                    name: word.word,
                 };
                 self.active_table().push(TableTypes::Reasingment(reasign));
             }

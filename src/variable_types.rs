@@ -2,7 +2,6 @@ use crate::semantic_analyzer::{TokenType, TableTypes, Scope};
 
 pub trait Types {
     fn new(token: TokenType) -> Self;
-    fn is_valid_argument(arg: String) -> bool;
     fn finished_definition(&self) -> bool;
     fn add_arguments(&mut self, argument: String);
 }
@@ -21,10 +20,6 @@ impl Types for Variable {
             value: None,
             name: None,
         }
-    }
-
-    fn is_valid_argument(arg: String) -> bool {
-         TokenType::is_value(TokenType::from_str(&arg))
     }
 
     fn finished_definition(&self) -> bool {
@@ -56,19 +51,11 @@ impl Types for Function {
         }
     }
 
-    fn is_valid_argument(arg: String) -> bool {
-         matches!(TokenType::from_str(&arg), TokenType::Unknow)
-    }
-
     fn finished_definition(&self) -> bool {
         self.name.is_some()
     }
 
     fn add_arguments(&mut self, argument: String) {
-        if !Function::is_valid_argument(argument.clone()) {
-            return;
-        }
-
         if self.name == None {
             self.name = Some(argument.clone());
         } else {
@@ -88,6 +75,7 @@ pub struct Reasingment {
     pub target: usize,
     pub target_scope: Scope,
     pub parameters: Option<Vec<TableTypes>>,
+    pub name: String,
 }
 
 impl Types for Reasingment {
@@ -96,12 +84,10 @@ impl Types for Reasingment {
             target: 0,
             target_scope: Scope::Root,
             parameters: None,
+            name: String::new(),
         }
     }
-    fn is_valid_argument(arg: String) -> bool {
-        TokenType::is_value(TokenType::from_str(&arg))
-    }
-    
+
     fn finished_definition(&self) -> bool {
         self.parameters.clone().map_or(true, |p| !p.is_empty())
     }
@@ -133,19 +119,12 @@ impl Types for FunctionCall {
             name: String::new(),
         }
     }
-    fn is_valid_argument(arg: String) -> bool {
-        TokenType::is_value(TokenType::from_str(&arg))
-    }
-    
+
     fn finished_definition(&self) -> bool {
         true
     }
 
     fn add_arguments(&mut self, argument: String) {
-        if !FunctionCall::is_valid_argument(argument.clone()) {
-            return;
-        }
-
         let mut table_type = TableTypes::from_token(TokenType::from_str(&argument));
 
         if let TableTypes::Variable(ref mut v) = table_type {
@@ -172,19 +151,11 @@ impl Types for Conditional {
         }
     }
 
-    fn is_valid_argument(_: String) -> bool {
-        true
-    }
-
     fn finished_definition(&self) -> bool {
         false
     }
 
     fn add_arguments(&mut self, argument: String) {
-        if !Conditional::is_valid_argument(argument.clone()) {
-            return;
-        }
-
         if let Some(TableTypes::Variable(v)) = self.condition.last_mut() {
             v.add_arguments(argument);
         }
@@ -208,19 +179,11 @@ impl Types for Loop {
         }
     }
 
-    fn is_valid_argument(_: String) -> bool {
-        true
-    }
-
     fn finished_definition(&self) -> bool {
         false
     }
 
     fn add_arguments(&mut self, argument: String) {
-        if !Loop::is_valid_argument(argument.clone()) {
-            return;
-        }
-
         if let Some(TableTypes::Variable(v)) = self.condition.last_mut() {
             v.add_arguments(argument);
         }

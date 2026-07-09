@@ -71,23 +71,6 @@
 | `FN` | `fn` | Function |
 | `WHILE_LOOP` | `while` | While loop |
 | `UNKNOW` | — | Unknown token |
-| `EQUALS` | `=` | Assignment |
-| `LOGICAL_EQUALS` | `==` | Equality comparison |
-| `LOGICAL_AND` | `&&` | Logical AND |
-| `LOGICAL_OR` | `\|\|` | Logical OR |
-| `NOT` | `!` | Logical negation |
-| `RIGHT_BIT_SHIFT` | `>>` | Bitwise right shift |
-| `LEFT_BIT_SHIFT` | `<<` | Bitwise left shift |
-| `AND` | `&` | Bitwise AND |
-| `OR` | `\|` | Bitwise OR |
-| `INTEGER_LITERAL` | `0–9…` | Integer literal |
-| `FLOAT_LITERAL` | `0–9.0…` | Floating point literal |
-| `CHAR_LITERAL` | `'a'…` | Character literal |
-| `STRING_LITERAL` | `"…"` | String literal |
-| `BOOL_LITERAL` | `true`/`false` | Boolean literal |
-| `FN` | `fn` | Function |
-| `WHILE_LOOP` | `while` | While loop |
-| `UNKNOW` | — | Unknown token |
 
 ---
 

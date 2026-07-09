@@ -105,6 +105,7 @@ struct ThreeAddressCodeGenerator {
     tac_table: Vec<Tac>,
     temp_count: usize,
     label_count: usize,
+    memory_alloc: usize,
 }
 
 impl ThreeAddressCodeGenerator {
@@ -113,6 +114,7 @@ impl ThreeAddressCodeGenerator {
             tac_table: vec![], 
             temp_count: 0,
             label_count: 0,
+            memory_alloc: 0,
         }
     }
 
@@ -254,22 +256,27 @@ impl ThreeAddressCodeGenerator {
     }
  
     fn add_function(&mut self, function: Function) {
+        self.memory_alloc = 0;
+
         let label = self.next_label();
 
-        let mut tac = Tac {
+        let tac = Tac {
             tac_type: Type::Function,
             result: None,
             arguments: vec![label.clone(), function.name.unwrap_or_default()],
             operator: None,
         };
  
-        for parameter in function.parameters.unwrap_or_default() {
-            tac.arguments.push(Self::extract_operand(&parameter));
-        }
- 
         self.tac_table.push(tac);
- 
+        let function_def_index = self.tac_table.len() - 1;
+
         self.generate(function.table);
+
+        self.tac_table[function_def_index].arguments.push(self.memory_alloc.to_string());
+        
+        for parameter in function.parameters.unwrap_or_default() {
+            self.tac_table[function_def_index].arguments.push(Self::extract_operand(&parameter));
+        }
 
         self.tac_table.push(Tac {
             tac_type: Type::FunctionEnd,
@@ -280,6 +287,8 @@ impl ThreeAddressCodeGenerator {
     }
  
     fn add_variable(&mut self, variable: Variable) {
+        let last_temp = self.temp_count;
+
         let name;
         if variable.name == Some("_".to_string()) {
             name = self.next_temp();
@@ -289,6 +298,8 @@ impl ThreeAddressCodeGenerator {
 
         let tokens = variable.value.unwrap_or_default();
         self.build_expression_chain(tokens, Some(name), Type::Variable);
+
+        self.memory_alloc += (self.temp_count - last_temp + 1) * 16; //TODO: this should depend on the variable and need to remember that before calling a function that it should be a multiple of 16
     }
  
     fn add_function_call(&mut self, call: FunctionCall) {
@@ -310,14 +321,10 @@ impl ThreeAddressCodeGenerator {
  
     fn add_reasingment(&mut self, reassignment: Reasingment) {
         let target_ref = Self::symbol_ref(reassignment.target, &reassignment.target_scope);
-        let tokens: Vec<String> = reassignment
-            .parameters
-            .unwrap_or_default()
-            .iter()
-            .map(Self::extract_operand)
-            .collect();
+        let tokens: Vec<String> = reassignment.parameters.unwrap_or_default().iter().map(Self::extract_operand).collect();
  
         self.build_expression_chain(tokens, Some(target_ref), Type::Reasingment);
+        self.tac_table.last_mut().unwrap().result = Some(reassignment.name);
     }
  
     fn add_conditional(&mut self, conditional: Conditional) {
@@ -383,7 +390,7 @@ impl ThreeAddressCodeGenerator {
             Type::Function => {
                 let label = tac.arguments.get(0).map(String::as_str).unwrap_or("?");
                 let name = tac.arguments.get(1).map(String::as_str).unwrap_or("?");
-                let params = tac.arguments.get(2..).unwrap_or(&[]).join(", ");
+                let params = tac.arguments.get(3..).unwrap_or(&[]).join(", ");
                 format!("{pad}{label}: function {name}({params})")
             }
             Type::FunctionEnd => {

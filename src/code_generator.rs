@@ -36,7 +36,7 @@ impl CodeGen {
     pub fn generate(&mut self, tac_table: Vec<Tac>) {
         for tac in tac_table.iter() {
             match tac.tac_type {
-                Type::Variable => self.add_variable(tac),
+                Type::Variable | Type::Reasingment => self.add_variable(tac),
                 Type::Function => self.add_function(tac),
                 Type::Call => self.add_function_call(tac),
                 _ => {}
@@ -99,7 +99,8 @@ impl CodeGen {
 
     fn add_function(&mut self, function: &Tac) {
         let name = function.arguments.get(1).map(String::as_str).unwrap_or("?");
-        let params: Vec<String> = function.arguments.iter().skip(2).cloned().collect();
+        let memory_alloc = function.arguments.get(2).map(String::as_str).unwrap_or("?");
+        let params: Vec<String> = function.arguments.iter().skip(3).cloned().collect();
 
         if name == "main" {
             self.emit_label("_start");
@@ -109,7 +110,7 @@ impl CodeGen {
 
         self.emit("    push rbp");
         self.emit("    mov rbp, rsp");
-        self.emit("    sub rsp, 128"); // Should not use fix size block. TODO: Dinimaic Size block
+        self.emit(&format!("    sub rsp, {}", memory_alloc));
         self.emit("");
 
         for (i, param_name) in params.iter().enumerate() {
