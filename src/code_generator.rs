@@ -1,6 +1,6 @@
 use std::vec::Vec;
 use std::collections::HashMap;
-use crate::three_address_code_gen::{Tac, Type};
+use crate::three_address_code_gen::{Tac, Type, Operator};
 
 const ARG_REGS: [&str; 6] = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"];
 
@@ -10,7 +10,7 @@ enum Slot {
 }
 
 impl Slot {
-    fn to_asm(&self) -> String {
+    fn to_asm_op(&self) -> String {
         match self {
             Slot::Mem(off) => format!("[rbp - {}]", off),
             Slot::Const(val) => val.clone(),
@@ -22,6 +22,7 @@ struct CodeGen {
     file: Vec<String>,
     slot_map: HashMap<String, i32>,
     offset: i32,
+    current_fn: String,
 }
 
 impl CodeGen {
@@ -30,16 +31,59 @@ impl CodeGen {
             file: vec![],
             slot_map: HashMap::new(),
             offset: 0,
+            current_fn: String::new(),
         }
     }
      
     pub fn generate(&mut self, tac_table: Vec<Tac>) {
-        for tac in tac_table.iter() {
+        let len = tac_table.len();
+        for (i, tac) in tac_table.iter().enumerate() {
             match tac.tac_type {
                 Type::Variable | Type::Reasingment => self.add_variable(tac),
-                Type::Function => self.add_function(tac),
+                Type::Function => {
+                    if self.current_fn == "main" {
+                        self.add_exit_syscall();
+                    } else if !self.current_fn.is_empty() {
+                        self.add_epilogue();
+                    }
+                    self.slot_map.clear();
+                    self.offset = 0;
+                    self.add_function(tac);
+                }
                 Type::Call => self.add_function_call(tac),
-                _ => {}
+                Type::Conditional => self.add_conditional(tac),
+                Type::Loop => self.add_loop_start(tac),
+                Type::ConditionalEnd => {
+                    let label = tac.arguments.get(0).map(String::as_str).unwrap_or("?");
+                    self.emit_label(label);
+                    self.emit("");
+                    if i == len - 1 && self.current_fn == "main" {
+                        self.add_exit_syscall();
+                    }
+                }
+                Type::LoopEnd => {
+                    let label = tac.arguments.get(0).map(String::as_str).unwrap_or("?");
+                    // jump back to re-evaluate the condition
+                    self.emit(&format!("    jmp {}_loop", label));
+                    self.emit("");
+                    self.emit_label(label);
+                    self.emit("");
+                    if i == len - 1 && self.current_fn == "main" {
+                        self.add_exit_syscall();
+                    }
+                }
+            }
+        }
+        if !self.current_fn.is_empty() {
+            let last_needs_epilogue = tac_table.last().map_or(false, |t| {
+                !matches!(t.tac_type, Type::ConditionalEnd | Type::LoopEnd)
+            });
+            if last_needs_epilogue {
+                if self.current_fn == "main" {
+                    self.add_exit_syscall();
+                } else {
+                    self.add_epilogue();
+                }
             }
         }
     }
@@ -49,18 +93,32 @@ impl CodeGen {
     }
 
     fn emit_label(&mut self, label: &str) {
-        self.file.push(format!("{}:", label));
+        self.file.push(format!("    {}:", label));
     }
 
     fn code_gen_bin_op(&mut self, op: &str, a: Slot, b: Slot, t_offset: i32) {
-        self.emit(&format!("    mov rax, {}", a.to_asm()));
-        self.emit(&format!("    {} rax, {}", op, b.to_asm()));
+        self.emit(&format!("    mov rax, {}", a.to_asm_op()));
+        self.emit(&format!("    {} rax, {}", op, b.to_asm_op()));
         self.emit(&format!("    mov [rbp - {}], rax", t_offset));
         self.emit("");
     }
 
     fn code_gen_bin_copy(&mut self, a: Slot, t_offset: i32) {
-        self.emit(&format!("    mov rax, {}", a.to_asm()));
+        self.emit(&format!("    mov rax, {}", a.to_asm_op()));
+        self.emit(&format!("    mov [rbp - {}], rax", t_offset));
+        self.emit("");
+    }
+
+    fn code_gen_logical_op(&mut self, combine: &str, a: Slot, b: Slot, t_offset: i32) {
+        self.emit(&format!("    mov rax, {}", a.to_asm_op()));
+        self.emit("    test rax, rax");
+        self.emit("    setne al");
+        self.emit("    movzx rax, al");
+        self.emit(&format!("    mov rcx, {}", b.to_asm_op()));
+        self.emit("    test rcx, rcx");
+        self.emit("    setne cl");
+        self.emit("    movzx rcx, cl");
+        self.emit(&format!("    {} rax, rcx", combine));
         self.emit(&format!("    mov [rbp - {}], rax", t_offset));
         self.emit("");
     }
@@ -90,17 +148,37 @@ impl CodeGen {
             None => {
                 self.code_gen_bin_copy(a_slot, t_offset);
             }
+            Some(Operator::LogicalAnd) => {
+                let b_slot = self.get_or_alloc_slot(&variable.arguments[1]);
+                self.code_gen_logical_op("and", a_slot, b_slot, t_offset);
+            }
+            Some(Operator::LogicalOr) => {
+                let b_slot = self.get_or_alloc_slot(&variable.arguments[1]);
+                self.code_gen_logical_op("or", a_slot, b_slot, t_offset);
+            }
+            Some(Operator::LogicalEquals) => {
+                let b_slot = self.get_or_alloc_slot(&variable.arguments[1]);
+                // cmp sets ZF; sete writes 1 if equal, 0 otherwise
+                self.emit(&format!("    mov rax, {}", a_slot.to_asm_op()));
+                self.emit(&format!("    cmp rax, {}", b_slot.to_asm_op()));
+                self.emit("    sete al");
+                self.emit("    movzx rax, al");
+                self.emit(&format!("    mov [rbp - {}], rax", t_offset));
+                self.emit("");
+            }
             Some(op) => {
                 let b_slot = self.get_or_alloc_slot(&variable.arguments[1]);
-                self.code_gen_bin_op(op.to_asm().unwrap(), a_slot, b_slot, t_offset);
+                self.code_gen_bin_op(op.to_asm_op().unwrap_or("?"), a_slot, b_slot, t_offset);
             }
         }
     }
 
     fn add_function(&mut self, function: &Tac) {
-        let name = function.arguments.get(1).map(String::as_str).unwrap_or("?");
-        let memory_alloc = function.arguments.get(2).map(String::as_str).unwrap_or("?");
-        let params: Vec<String> = function.arguments.iter().skip(3).cloned().collect();
+        let name = function.arguments.get(0).map(String::as_str).unwrap_or("?");
+        let memory_alloc = function.arguments.get(1).map(String::as_str).unwrap_or("?");
+        let params: Vec<String> = function.arguments.iter().skip(2).cloned().collect();
+
+        self.current_fn = name.to_string();
 
         if name == "main" {
             self.emit_label("_start");
@@ -115,7 +193,7 @@ impl CodeGen {
 
         for (i, param_name) in params.iter().enumerate() {
             if i >= ARG_REGS.len() {
-                break;  // TODO: Need to implement this. 
+                break;  // TODO: Need to implement this.
             }
             let slot = self.get_or_alloc_slot(param_name);
             let offset = match slot {
@@ -124,6 +202,14 @@ impl CodeGen {
             };
             self.emit(&format!("    mov [rbp - {}], {}", offset, ARG_REGS[i]));
         }
+        self.emit("");
+    }
+
+    fn add_exit_syscall(&mut self) {
+        self.emit("    ; exit(0)");
+        self.emit("    mov rax, 60");
+        self.emit("    xor rdi, rdi");
+        self.emit("    syscall");
         self.emit("");
     }
 
@@ -136,13 +222,12 @@ impl CodeGen {
                 break; // TODO: Need to implement the ability to pass more parameters
             }
             let slot = self.get_or_alloc_slot(arg_name);
-            self.emit(&format!("    mov {}, {}", ARG_REGS[i], slot.to_asm()));
+            self.emit(&format!("    mov {}, {}", ARG_REGS[i], slot.to_asm_op()));
         }
 
         self.emit(&format!("    call {}", name));
         self.emit("");
     }
-
     // Returns values
     fn add_epilogue(&mut self) {
         self.emit("    mov rsp, rbp");
@@ -150,11 +235,58 @@ impl CodeGen {
         self.emit("    ret");
         self.emit("");
     }
+
+    fn emit_condition_jump(&mut self, label: &str, tac: &Tac) {
+        match (&tac.operator, tac.arguments.get(1..).unwrap_or(&[])) {
+            (Some(op), [left, right]) => {
+                let a_slot = self.get_or_alloc_slot(left);
+                let b_slot = self.get_or_alloc_slot(right);
+
+                self.emit(&format!("    mov rax, {}", a_slot.to_asm_op()));
+                self.emit(&format!("    cmp rax, {}", b_slot.to_asm_op()));
+
+                let jump_mnemonic = match op {
+                    Operator::LogicalEquals => "jne",
+                    _ => panic!("unsupported conditional operator: {:?}", op),
+                };
+                self.emit(&format!("    {} {}", jump_mnemonic, label));
+            }
+            (_, [value]) => {
+                let slot = self.get_or_alloc_slot(value);
+                self.emit(&format!("    mov rax, {}", slot.to_asm_op()));
+                self.emit("    test rax, rax");
+                self.emit(&format!("    je {}", label));
+            }
+            _ => panic!("TAC has no usable condition"),
+        }
+        self.emit("");
+    }
+
+    fn add_conditional(&mut self, conditional: &Tac) {
+        let label = conditional.arguments.get(0).expect("conditional TAC needs a label").clone();
+        self.emit_condition_jump(&label, conditional);
+    }
+
+    fn add_loop_start(&mut self, loop_tac: &Tac) {
+        let label = loop_tac.arguments.get(0).expect("loop TAC needs a label").clone();
+        self.emit_label(&format!("{}_loop", label));
+        self.emit("");
+        self.emit_condition_jump(&label, loop_tac);
+    }
 }
 
-pub fn generate_assembly(tac_table: Vec<Tac>) {
+
+
+pub fn generate_assembly(tac_table: Vec<Tac>) -> Vec<String> {
     let mut code_gen = CodeGen::new();
     code_gen.generate(tac_table);
 
-    println!("Assembly output: {:#?}", code_gen.file);
+    let mut out = vec![
+        "bits 64".to_string(),
+        "global _start".to_string(),
+        "section .text".to_string(),
+        String::new(),
+    ];
+    out.extend(code_gen.file);
+    out
 }

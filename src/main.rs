@@ -1,8 +1,10 @@
 use std::env;
+use std::process::Command;
 use monkey_c::parser::parse_text;
 use monkey_c::semantic_analyzer::analyze_semantically;
 use monkey_c::three_address_code_gen::generate_three_address_code;
 use monkey_c::code_generator::generate_assembly;
+use monkey_c::write_asm::write_asm;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -23,8 +25,38 @@ fn main() {
     let tac = generate_three_address_code(type_table);
 
     println!("Translating into assembly...");
-    generate_assembly(tac);
+    let asm = generate_assembly(tac);
+
+    let asm_path = args[1].replace(".MC", ".asm");
+    let obj_path = args[1].replace(".MC", ".o");
+    let bin_path = args[1].replace(".MC", "");
+
+    println!("Writing assembly to file...");
+    write_asm(&asm_path, &asm);
+
+    println!("Assembling with nasm...");
+    let nasm_status = Command::new("nasm")
+        .args(["-f", "elf64", &asm_path, "-o", &obj_path])
+        .status()
+        .expect("Failed to run nasm — is it installed?");
+    if !nasm_status.success() {
+        eprintln!("nasm failed with exit code: {}", nasm_status);
+        return;
+    }
+
+    println!("Linking with ld...");
+    let ld_status = Command::new("ld")
+        .args([&obj_path, "-o", &bin_path])
+        .status()
+        .expect("Failed to run ld");
+    if !ld_status.success() {
+        eprintln!("ld failed with exit code: {}", ld_status);
+        return;
+    }
+
+    println!("Done! Binary written to: {}", bin_path);
 }
+
 
 fn check_args(args: Vec<String>) {
     if args.len() == 1 {
