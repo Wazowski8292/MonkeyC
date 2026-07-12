@@ -3,6 +3,7 @@ FILE ?= Code.MC
 run:
 	clear
 	cargo run $(FILE)
+	./Code
 build:
 	clear
 	cargo build

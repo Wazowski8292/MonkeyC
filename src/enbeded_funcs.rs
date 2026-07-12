@@ -1,19 +1,21 @@
 pub struct PubFuncs {
-    name: &str,
-    function: String,
+    pub name: &'static str,
+    pub function: &'static str,
 }
 
-const FUNTIONS = PubFuncs {
-    {
-       name: "print_int",
-       function: "print_int:
-                    push rbp
-                    mov rbp, rsp
-                    mov esi, edi
-                    lea rdi, [rel fmt_int]
-                    xor eax, eax
-                    call printf
-                    pop rbp
-                    ret",
-    }
-}
+pub const FUNCTIONS: &[PubFuncs] = &[
+    PubFuncs {
+        name: "print_int",
+        function: 
+"print_int:\n
+    push rbp\n
+    mov rbp, rsp\n
+    mov esi, edi\n
+    lea rdi, [rel fmt_int]\n
+    xor eax, eax\n
+    call printf\n
+    pop rbp\n
+    ret\n",
+
+    },
+];

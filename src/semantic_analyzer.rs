@@ -1,8 +1,7 @@
 use crate::parser::{Block, Word};
 use crate::variable_types::{Variable, Function, Reasingment, FunctionCall, Conditional, Loop, Types};
 use std::vec::Vec;
-
-
+use crate::enbeded_funcs::FUNCTIONS;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum TokenType {
@@ -231,11 +230,24 @@ impl SemanticAnalyzer {
     } 
 
     fn resolve(&mut self, name: String) -> Option<(usize, Scope, bool)> {
-        if let Some(result) = Self::resolve_in_chain( &name, &mut self.table, 0, self.max_nesting, self.defining_parameters) {
+        if self.is_enbeded_func(name.clone()) {
+            return Some((0, Scope::Function, true));
+        } else if let Some(result) = Self::resolve_in_chain( &name, &mut self.table, 0, self.max_nesting, self.defining_parameters) {
             return Some(result);
         } else {
             return self.resolve_in_parameters(&name);
         }
+    }
+
+    fn is_enbeded_func(&mut self, name: String) -> bool{
+        for func in FUNCTIONS.iter() {
+            if func.name == name {
+                println!("Found print");
+                return true;
+            }
+        }
+
+        false
     }
 
     fn find_in_level(name: &str, table: &Vec<TableTypes>, nest_level: usize) -> Option<(usize, Scope, bool)> {

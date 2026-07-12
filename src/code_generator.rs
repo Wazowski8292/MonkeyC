@@ -1,6 +1,7 @@
 use std::vec::Vec;
 use std::collections::HashMap;
 use crate::three_address_code_gen::{Tac, Type, Operator};
+use crate::enbeded_funcs::FUNCTIONS;
 
 const ARG_REGS: [&str; 6] = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"];
 
@@ -23,6 +24,7 @@ struct CodeGen {
     slot_map: HashMap<String, i32>,
     offset: i32,
     current_fn: String,
+    enbeded_funcs: Vec<String>,
 }
 
 impl CodeGen {
@@ -32,6 +34,7 @@ impl CodeGen {
             slot_map: HashMap::new(),
             offset: 0,
             current_fn: String::new(),
+            enbeded_funcs: vec![],
         }
     }
      
@@ -181,9 +184,9 @@ impl CodeGen {
         self.current_fn = name.to_string();
 
         if name == "main" {
-            self.emit_label("_start");
+            self.emit("main:");
         } else {
-            self.emit_label(name);
+            self.emit(name);
         }
 
         self.emit("    push rbp");
@@ -227,7 +230,27 @@ impl CodeGen {
 
         self.emit(&format!("    call {}", name));
         self.emit("");
+
+        self.add_enbeded_func(name.to_string())
     }
+
+    fn add_enbeded_func(&mut self, name: String) {
+        for func in FUNCTIONS.iter() {
+            if func.name == name && !self.enbeded_funcs.contains(&name) {
+                let mut current_line: String = Default::default();
+                for line in func.function.chars() {
+                    current_line.push(line.clone());
+
+                    if line == '\n' {
+                        self.enbeded_funcs.push(current_line.clone());
+                        current_line.clear();
+                    }
+                }
+                return;
+            }
+        }
+    }
+
     // Returns values
     fn add_epilogue(&mut self) {
         self.emit("    mov rsp, rbp");
@@ -283,10 +306,16 @@ pub fn generate_assembly(tac_table: Vec<Tac>) -> Vec<String> {
 
     let mut out = vec![
         "bits 64".to_string(),
-        "global _start".to_string(),
+        "".to_string(),
+        "section .data".to_string(),
+        "    fmt_int   db \"%d\", 10, 0".to_string(),
+        "".to_string(),
         "section .text".to_string(),
+        "    extern printf".to_string(),
+        "    global main".to_string(),
         String::new(),
     ];
+    out.extend(code_gen.enbeded_funcs);
     out.extend(code_gen.file);
     out
 }

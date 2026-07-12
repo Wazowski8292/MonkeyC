@@ -44,13 +44,13 @@ fn main() {
         return;
     }
 
-    println!("Linking with ld...");
-    let ld_status = Command::new("ld")
-        .args([&obj_path, "-o", &bin_path])
+    println!("Linking with gcc...");
+    let link_status = Command::new("gcc")
+        .args([&obj_path, "-no-pie", "-o", &bin_path])
         .status()
-        .expect("Failed to run ld");
-    if !ld_status.success() {
-        eprintln!("ld failed with exit code: {}", ld_status);
+        .expect("Failed to run gcc — is it installed?");
+    if !link_status.success() {
+        eprintln!("gcc failed with exit code: {}", link_status);
         return;
     }
 
