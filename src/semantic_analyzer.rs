@@ -2,6 +2,8 @@ use crate::parser::{Block, Word};
 use crate::variable_types::{Variable, Function, Reasingment, FunctionCall, Conditional, Loop, Types};
 use std::vec::Vec;
 
+
+
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum TokenType {
     If,
