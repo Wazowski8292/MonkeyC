@@ -23,7 +23,9 @@
 ### Prerequisites
 
 - **Rust**
-- **Code**
+- **nasm** for compiling the assembly code, but another would also work.
+- **gcc** for linking the compiled binary, but another would also work.
+- **Monkey C code**
 
 ### Setup Instructions
 
@@ -76,11 +78,7 @@
 
 ## Todo
 
-- [x] Call functions
-- [x] Pass parameters
-- [ ] Add conditionals
-- [ ] Add loop
-
+- [ ] Need to be able to pass reasingments as parameters and also function calls
 - [ ] Do parameter type checks
 - [ ] Add for loop
 - [ ] Check if the operator make sense

@@ -129,7 +129,7 @@ impl CodeGen {
 
     fn get_or_alloc_slot(&mut self, name: &str) -> Slot {
         let token = TokenType::from_str(name);
-        if TokenType::is_value(token) && name.chars().next() != Some('_') {
+        if TokenType::is_value(token) && token != TokenType::Unknow {
             if token == TokenType::BoolLiteral {
                 if name == "true" {
                     return Slot::Const(1.to_string());
