@@ -1,12 +1,12 @@
 <div align="center">
 
-# monkey_c
+# Monkey C
 
 </div>
 
 ---
 
-## Index
+## Indexk
 
 1. [How to Install and Run](#how-to-install-and-run)
 2. [Token types](#token-types)
