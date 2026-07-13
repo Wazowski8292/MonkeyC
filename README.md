@@ -81,7 +81,6 @@
 - [ ] Add conditionals
 - [ ] Add loop
 
-- [ ] Actually compile automaticly
 - [ ] Do parameter type checks
 - [ ] Add for loop
 - [ ] Check if the operator make sense

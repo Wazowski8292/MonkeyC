@@ -1,6 +1,7 @@
 use std::vec::Vec;
 use std::collections::HashMap;
 use crate::three_address_code_gen::{Tac, Type, Operator};
+use crate::semantic_analyzer::TokenType;
 use crate::enbeded_funcs::FUNCTIONS;
 
 const ARG_REGS: [&str; 6] = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"];
@@ -127,7 +128,16 @@ impl CodeGen {
     }
 
     fn get_or_alloc_slot(&mut self, name: &str) -> Slot {
-        if name.parse::<f64>().is_ok() {
+        let token = TokenType::from_str(name);
+        if TokenType::is_value(token) && name.chars().next() != Some('_') {
+            if token == TokenType::BoolLiteral {
+                if name == "true" {
+                    return Slot::Const(1.to_string());
+                } else {
+                    return Slot::Const(0.to_string());
+                }
+            }
+
             return Slot::Const(name.to_string());
         }
 
@@ -161,7 +171,6 @@ impl CodeGen {
             }
             Some(Operator::LogicalEquals) => {
                 let b_slot = self.get_or_alloc_slot(&variable.arguments[1]);
-                // cmp sets ZF; sete writes 1 if equal, 0 otherwise
                 self.emit(&format!("    mov rax, {}", a_slot.to_asm_op()));
                 self.emit(&format!("    cmp rax, {}", b_slot.to_asm_op()));
                 self.emit("    sete al");
@@ -238,12 +247,19 @@ impl CodeGen {
         for func in FUNCTIONS.iter() {
             if func.name == name && !self.enbeded_funcs.contains(&name) {
                 let mut current_line: String = Default::default();
+                let mut counter = 0;
+
                 for line in func.function.chars() {
                     current_line.push(line.clone());
 
                     if line == '\n' {
-                        self.enbeded_funcs.push(current_line.clone());
-                        current_line.clear();
+                        if counter == 0 {
+                            counter = 1;
+                        } else {
+                            self.enbeded_funcs.push(current_line.clone());
+                            current_line.clear();
+                            counter = 0;
+                        }
                     }
                 }
                 return;

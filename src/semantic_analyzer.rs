@@ -218,11 +218,11 @@ impl SemanticAnalyzer {
                 }
                 Block::Parameter(blocks) => {
                     let prev_defining_fn = self.defining_fn;
-                    let prev_defining_parameters = self.defining_parameters;
+                    //let prev_defining_parameters = self.defining_parameters;
                     self.defining_fn = true;
                     self.defining_parameters = true;
                     self.analyze(blocks.to_vec());
-                    self.defining_parameters = prev_defining_parameters;
+                    self.defining_parameters = false;
                     self.defining_fn = prev_defining_fn;
                 }
             }
@@ -230,16 +230,14 @@ impl SemanticAnalyzer {
     } 
 
     fn resolve(&mut self, name: String) -> Option<(usize, Scope, bool)> {
-        if self.is_enbeded_func(name.clone()) {
-            return Some((0, Scope::Function, true));
-        } else if let Some(result) = Self::resolve_in_chain( &name, &mut self.table, 0, self.max_nesting, self.defining_parameters) {
+        if let Some(result) = Self::resolve_in_chain( &name, &mut self.table, 0, self.max_nesting, self.defining_parameters) {
             return Some(result);
         } else {
             return self.resolve_in_parameters(&name);
         }
     }
 
-    fn is_enbeded_func(&mut self, name: String) -> bool{
+    fn is_enbeded_func(name: String) -> bool{
         for func in FUNCTIONS.iter() {
             if func.name == name {
                 println!("Found print");
@@ -258,6 +256,7 @@ impl SemanticAnalyzer {
             TableTypes::Function(f) if f.name.as_deref() == Some(name) => {
                 Some((idx, Self::scope_for_level(nest_level), true))
             }
+            _ if Self::is_enbeded_func(name.to_string()) => Some((0, Scope::Function, true)),
             _ => None,
         })
     }
@@ -398,8 +397,10 @@ impl SemanticAnalyzer {
         let mut fc_target_scope = Scope::Root;
         let mut fc_params_len = 0;
 
+        let defining_parameters = self.defining_parameters;
+
         match self.active_table().last() {
-            Some(TableTypes::FunctionCall(fc)) => {
+            Some(TableTypes::FunctionCall(fc)) if defining_parameters => {
                 is_fc = true;
                 fc_target = fc.target;
                 fc_target_scope = fc.target_scope;
