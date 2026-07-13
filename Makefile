@@ -12,3 +12,6 @@ check:
 	cargo check
 debug:
 	cargo build
+
+clean: 
+	cargo clean

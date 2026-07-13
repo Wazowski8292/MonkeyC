@@ -15,6 +15,7 @@ pub const FUNCTIONS: &[PubFuncs] = &[
     xor eax, eax
     call printf
     pop rbp
-    ret",
+    ret\n
+    ",
     },
 ];
