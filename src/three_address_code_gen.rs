@@ -80,7 +80,7 @@ impl Operator {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Type {
     Function,
     Variable,
@@ -90,6 +90,7 @@ pub enum Type {
     ConditionalEnd,
     Loop,
     LoopEnd,
+    Label
 }
 
 #[derive(Debug, Clone)]
@@ -212,48 +213,39 @@ impl ThreeAddressCodeGenerator {
         left
     }
 
-    fn build_expression_chain( &mut self, tokens: Vec<String>, target: Option<String>, tac_type: Type) -> Option<String> {
+    fn build_expression_chain( &mut self, tokens: Vec<String>, target: String, tac_type: Type) {
         if tokens.is_empty() {
-            return None;
+            return;
         }
  
         if tokens.len() == 1 {
             let operand = tokens[0].clone();
-            return match target {
-                Some(result_name) => {
-                    self.tac_table.push(Tac {
-                        tac_type,
-                        arguments: vec![operand],
-                        operator: None,
-                        result: Some(result_name.clone()),
-                    });
-                    Some(result_name)
-                }
-                None => Some(operand),
-            };
+            
+            self.tac_table.push(Tac {
+                tac_type,
+                arguments: vec![operand],
+                operator: None,
+                result: Some(target),
+            });
+
+            return;
         }
  
         let mut pos = 0;
         let final_result = self.parse_expr(&tokens, &mut pos, 0, tac_type.clone());
  
-        match target {
-            Some(target_name) => {
-                if let Some(last) = self.tac_table.last_mut() {
-                    if last.result.as_deref() == Some(final_result.as_str()) {
-                        last.result = Some(target_name.clone());
-                        return Some(target_name);
-                    }
-                }
-                self.tac_table.push(Tac {
-                    tac_type,
-                    arguments: vec![final_result],
-                    operator: None,
-                    result: Some(target_name.clone()),
-                });
-                Some(target_name)
+        if let Some(last) = self.tac_table.last_mut() {
+            if last.result.as_deref() == Some(final_result.as_str()) {
+                return;
             }
-            None => Some(final_result),
         }
+        
+        self.tac_table.push(Tac {
+            tac_type,
+            arguments: vec![final_result],
+            operator: None,
+            result: Some(target.clone()),
+        });
     }
  
     fn add_function(&mut self, function: Function) {
@@ -289,7 +281,7 @@ impl ThreeAddressCodeGenerator {
         }
 
         let tokens = variable.value.unwrap_or_default();
-        self.build_expression_chain(tokens, Some(name), Type::Variable);
+        self.build_expression_chain(tokens, name, Type::Variable);
 
         self.memory_alloc += (self.temp_count - last_temp + 1) * 16; //TODO: this should depend on the variable and need to remember that before calling a function that it should be a multiple of 16
     }
@@ -315,7 +307,7 @@ impl ThreeAddressCodeGenerator {
         let target_ref = Self::symbol_ref(reassignment.target, &reassignment.target_scope);
         let tokens: Vec<String> = reassignment.parameters.unwrap_or_default().iter().map(Self::extract_operand).collect();
  
-        self.build_expression_chain(tokens, Some(target_ref), Type::Reasingment);
+        self.build_expression_chain(tokens, target_ref, Type::Reasingment);
         self.tac_table.last_mut().unwrap().result = Some(reassignment.name);
     }
  
@@ -324,11 +316,23 @@ impl ThreeAddressCodeGenerator {
     }
  
     fn add_loop(&mut self, loop_node: Loop) {
+
         self.add_conditional_block(Type::Loop, Type::LoopEnd, loop_node.condition, loop_node.table);
     }
 
     fn add_conditional_block(&mut self, start: Type, end: Type, condition: Vec<TableTypes>, table: Vec<TableTypes>) {
         let label = self.next_label();
+
+        if start == Type::Loop {
+            let tac_label = Tac {
+                tac_type: Type::Label,
+                result: None,
+                arguments: vec![format!("{}_loop", label.clone())],
+                operator: None,
+            };
+
+            self.tac_table.push(tac_label);
+        }
 
         let mut tac = Tac {
             tac_type: start,
@@ -410,21 +414,19 @@ impl ThreeAddressCodeGenerator {
                 format!("{pad}{label}: end while")
             }
             Type::Conditional => {
-                let label = tac.arguments.get(0).map(String::as_str).unwrap_or("?");
                 match (&tac.operator, tac.arguments.get(1..).unwrap_or(&[])) {
                     (Some(op), [left, right]) => {
-                        format!("{pad}{label}: if ({left} {} {right})", op.as_str())
+                        format!("{pad} if ({left} {} {right})", op.as_str())
                     }
-                    (_, rest) => format!("{pad}{label}: if ({})", rest.join(", ")),
+                    (_, rest) => format!("{pad} if ({})", rest.join(", ")),
                 }
             }
             Type::Loop => {
-                let label = tac.arguments.get(0).map(String::as_str).unwrap_or("?");
                 match (&tac.operator, tac.arguments.get(1..).unwrap_or(&[])) {
                     (Some(op), [left, right]) => {
-                        format!("{pad}{label}: while ({left} {} {right})", op.as_str())
+                        format!("{pad} while ({left} {} {right})", op.as_str())
                     }
-                    (_, rest) => format!("{pad}{label}: while ({})", rest.join(", ")),
+                    (_, rest) => format!("{pad} while ({})", rest.join(", ")),
                 }
             }
             Type::ConditionalEnd => {
@@ -445,6 +447,10 @@ impl ThreeAddressCodeGenerator {
                     (None, [value]) => format!("{pad}{result} = {value}"),
                     _ => format!("{pad}{result} = {:?}", tac.arguments),
                 }
+            }
+            Type::Label => {
+                let label = tac.arguments.get(0).map(String::as_str).unwrap_or("?");
+                format!("{pad}{label}:")
             }
         }
     }

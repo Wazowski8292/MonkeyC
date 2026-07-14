@@ -76,6 +76,9 @@ impl CodeGen {
                         self.add_exit_syscall();
                     }
                 }
+                Type::Label => {
+                    self.emit_label(&tac.arguments[0]);
+                }
             }
         }
         if !self.current_fn.is_empty() {
@@ -308,8 +311,6 @@ impl CodeGen {
 
     fn add_loop_start(&mut self, loop_tac: &Tac) {
         let label = loop_tac.arguments.get(0).expect("loop TAC needs a label").clone();
-        self.emit_label(&format!("{}_loop", label));
-        self.emit("");
         self.emit_condition_jump(&label, loop_tac);
     }
 }
