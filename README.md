@@ -78,7 +78,8 @@
 
 ## Todo
 
-- [ ] Need to be able to pass reasingments as parameters and also function calls
+- [x] Need to be able to pass reasingments as parameters
+- [ ] Need to be able to pass function calls as parameters
 - [ ] Do parameter type checks
 - [ ] Add for loop
 - [ ] Check if the operator make sense

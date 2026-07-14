@@ -105,7 +105,6 @@ impl Types for Reasingment {
 #[derive(Debug, PartialEq, Clone)]
 pub struct FunctionCall {
     pub target: usize,
-    pub target_scope: Scope,
     pub parameters: Option<Vec<TableTypes>>,
     pub name: String,
 }
@@ -114,7 +113,6 @@ impl Types for FunctionCall {
     fn new(_: TokenType) -> Self {
         Self {
             target: 0,
-            target_scope: Scope::Root,
             parameters: None,
             name: String::new(),
         }
@@ -127,9 +125,12 @@ impl Types for FunctionCall {
     fn add_arguments(&mut self, argument: String) {
         let mut table_type = TableTypes::from_token(TokenType::from_str(&argument));
 
-        if let TableTypes::Variable(ref mut v) = table_type {
-            v.value.get_or_insert_with(Vec::new).push(argument);
+        match table_type {
+            TableTypes::Variable(ref mut v) => v.value.get_or_insert_with(Vec::new).push(argument),
+            TableTypes::Reasingment(ref mut r) => r.name = argument,
+            _ => {}
         }
+
         self.parameters.get_or_insert_with(Vec::new).push(table_type); 
     }
 }

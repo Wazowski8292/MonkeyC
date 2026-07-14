@@ -394,7 +394,6 @@ impl SemanticAnalyzer {
         
         let mut is_fc = false;
         let mut fc_target = 0;
-        let mut fc_target_scope = Scope::Root;
         let mut fc_params_len = 0;
 
         let defining_parameters = self.defining_parameters;
@@ -403,7 +402,6 @@ impl SemanticAnalyzer {
             Some(TableTypes::FunctionCall(fc)) if defining_parameters => {
                 is_fc = true;
                 fc_target = fc.target;
-                fc_target_scope = fc.target_scope;
                 fc_params_len = fc.parameters.as_ref().map_or(0, |p| p.len());
             }
             _ => {}
@@ -411,22 +409,12 @@ impl SemanticAnalyzer {
 
         let mut expected_fc_params = 0;
         if is_fc {
-            let expected_params = match fc_target_scope {
-                Scope::Root =>{ 
-                    if let Some(TableTypes::Function(f)) = self.table.get(fc_target) {
-                        f.parameters.as_ref().map_or(0, |p| p.len())
-                    } else { 0 }
-                },
-                Scope::Function => {
-                    if let Some(TableTypes::Function(f)) = self.table.last() {
-                        if let Some(TableTypes::Function(inner)) = f.table.get(fc_target) {
-                            inner.parameters.as_ref().map_or(0, |p| p.len())
-                        } else { 0 }
-                    } else { 0 }
-                },
-                _ => 0,
-            };
-            expected_fc_params = expected_params;
+            if let Some(TableTypes::Function(f)) = self.table.get(fc_target) {
+                expected_fc_params = f.parameters.as_ref().map_or(1, |p| p.len());
+            } else { 
+                expected_fc_params = 0; 
+            }
+
             last_finished = false;
         }
 
@@ -477,7 +465,6 @@ impl SemanticAnalyzer {
         if is_func {
             *last = TableTypes::FunctionCall(FunctionCall {
                 target: idx,
-                target_scope: scope,
                 parameters: None,
                 name: word,
             });
@@ -498,7 +485,6 @@ impl SemanticAnalyzer {
             if is_func {
                 let func_call = FunctionCall {
                     target: idx,
-                    target_scope: scope,
                     parameters: None,
                     name: word.word,
                 };

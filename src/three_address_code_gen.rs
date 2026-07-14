@@ -141,6 +141,8 @@ impl ThreeAddressCodeGenerator {
                     return first.clone();
                 }
             }
+        } else if let TableTypes::Reasingment(r) = entry {
+                return r.name.clone();
         }
         String::new()
     }
