@@ -178,7 +178,7 @@ impl ThreeAddressCodeGenerator {
         }
     }
 
-    fn parse_expr(&mut self, tokens: &[String], pos: &mut usize, min_prec: u8, tac_type: Type) -> String {
+    fn parse_expr(&mut self, tokens: &[String], pos: &mut usize, min_prec: u8, tac_type: Type, target: String) -> String {
         let mut left = tokens[*pos].clone();
         *pos += 1;
  
@@ -198,9 +198,9 @@ impl ThreeAddressCodeGenerator {
                 break;
             }
  
-            let right = self.parse_expr(tokens, pos, prec + 1, tac_type.clone());
+            let right = self.parse_expr(tokens, pos, prec + 1, tac_type.clone(), target.clone());
  
-            let result_name = self.next_temp();
+            let result_name = if *pos == tokens.len() - 2{ self.next_temp() } else { target.clone() };
             self.tac_table.push(Tac {
                 tac_type: tac_type.clone(),
                 arguments: vec![left, right],
@@ -232,20 +232,7 @@ impl ThreeAddressCodeGenerator {
         }
  
         let mut pos = 0;
-        let final_result = self.parse_expr(&tokens, &mut pos, 0, tac_type.clone());
- 
-        if let Some(last) = self.tac_table.last_mut() {
-            if last.result.as_deref() == Some(final_result.as_str()) {
-                return;
-            }
-        }
-        
-        self.tac_table.push(Tac {
-            tac_type,
-            arguments: vec![final_result],
-            operator: None,
-            result: Some(target.clone()),
-        });
+        let _ = self.parse_expr(&tokens, &mut pos, 0, tac_type.clone(), target);
     }
  
     fn add_function(&mut self, function: Function) {
