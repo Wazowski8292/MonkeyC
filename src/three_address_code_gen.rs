@@ -181,7 +181,7 @@ impl ThreeAddressCodeGenerator {
         }
     }
 
-    fn parse_expr(&mut self, tokens: &[Value], pos: &mut usize, min_prec: u8, tac_type: Type, target: String) -> String {
+    fn parse_expr(&mut self, tokens: &[Value], pos: &mut usize, min_prec: u8, tac_type: Type, target: String, is_top: bool) -> String {
         let mut left = {
             match tokens[*pos].clone() {
                 Value::Var(val) => val,
@@ -219,9 +219,19 @@ impl ThreeAddressCodeGenerator {
                 break;
             }
  
-            let right = self.parse_expr(tokens, pos, prec + 1, tac_type.clone(), target.clone());
+            let right = self.parse_expr(tokens, pos, prec + 1, tac_type.clone(), target.clone(), false);
  
-            let result_name = if *pos == tokens.len() - 2{ self.next_temp() } else { target.clone() };
+            let next_continues = match tokens.get(*pos) {
+                Some(Value::Var(s)) => Self::precedence(&Operator::from_str(s)) >= min_prec,
+                _ => false,
+            };
+
+            let result_name = if is_top && !next_continues {
+                target.clone()
+            } else {
+                self.next_temp()
+            };
+
             self.tac_table.push(Tac {
                 tac_type: tac_type.clone(),
                 arguments: vec![left, right],
@@ -266,7 +276,7 @@ impl ThreeAddressCodeGenerator {
         }
  
         let mut pos = 0;
-        let _ = self.parse_expr(&tokens, &mut pos, 0, tac_type.clone(), target);
+        let _ = self.parse_expr(&tokens, &mut pos, 0, tac_type.clone(), target, true);
     }
 
     fn get_return_value() {
