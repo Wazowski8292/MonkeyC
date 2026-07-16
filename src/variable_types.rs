@@ -7,9 +7,15 @@ pub trait Types {
 }
 
 #[derive(Debug, PartialEq, Clone)]
+pub enum Value {
+    Var(String),
+    FuncCall(FunctionCall),
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub struct Variable {
     pub token_type: TokenType,
-    pub value: Option<Vec<String>>,
+    pub value: Option<Vec<Value>>,
     pub name: Option<String>,
 }
 
@@ -30,7 +36,8 @@ impl Types for Variable {
         if self.name == None {
             self.name = Some(argument);
         } else {
-            self.value.get_or_insert_with(Vec::new).push(argument);
+
+            self.value.get_or_insert_with(Vec::new).push(Value::Var(argument));
         }
     }
 }
@@ -62,7 +69,7 @@ impl Types for Function {
             let mut table_type = TableTypes::from_token(TokenType::from_str(&argument));
 
             if let TableTypes::Variable(ref mut v) = table_type {
-                v.value.get_or_insert_with(Vec::new).push(argument);
+                v.value.get_or_insert_with(Vec::new).push(Value::Var(argument));
             }
             self.parameters.get_or_insert_with(Vec::new).push(table_type); 
         }
@@ -96,7 +103,7 @@ impl Types for Reasingment {
         let mut table_type = TableTypes::from_token(TokenType::from_str(&argument));
 
         match table_type {
-            TableTypes::Variable(ref mut v) => v.value.get_or_insert_with(Vec::new).push(argument),
+            TableTypes::Variable(ref mut v) => v.value.get_or_insert_with(Vec::new).push(Value::Var(argument)),
             TableTypes::Reasingment(ref mut r) => r.name = argument,
             _ => {}
         }
@@ -129,7 +136,7 @@ impl Types for FunctionCall {
         let mut table_type = TableTypes::from_token(TokenType::from_str(&argument));
 
         match table_type {
-            TableTypes::Variable(ref mut v) => v.value.get_or_insert_with(Vec::new).push(argument),
+            TableTypes::Variable(ref mut v) => v.value.get_or_insert_with(Vec::new).push(Value::Var(argument)),
             TableTypes::Reasingment(ref mut r) => r.name = argument,
             _ => {}
         }

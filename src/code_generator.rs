@@ -79,6 +79,14 @@ impl CodeGen {
                 Type::Label => {
                     self.emit_label(&tac.arguments[0]);
                 }
+                Type::GetReturn => {
+                    let t_offset = match self.get_or_alloc_slot(&tac.clone().result.unwrap()) {
+                        Slot::Mem(off) => off,
+                        Slot::Const(_) => panic!("assignment target cannot be a constant"),
+                    };
+
+                    self.emit(&format!("    mov [rbp - {}], rax", t_offset));
+                }
             }
         }
         if !self.current_fn.is_empty() {

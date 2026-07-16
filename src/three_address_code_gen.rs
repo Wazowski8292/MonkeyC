@@ -1,4 +1,4 @@
-use crate::variable_types::{Variable, Function, Reasingment, FunctionCall, Conditional, Loop};
+use crate::variable_types::{Variable, Function, Reasingment, FunctionCall, Conditional, Loop, Value};
 use crate::semantic_analyzer::{TableTypes, Scope};
 
 use std::vec::Vec;
@@ -90,7 +90,8 @@ pub enum Type {
     ConditionalEnd,
     Loop,
     LoopEnd,
-    Label
+    Label,
+    GetReturn,
 }
 
 #[derive(Debug, Clone)]
@@ -139,7 +140,9 @@ impl ThreeAddressCodeGenerator {
             }
             if let Some(values) = &var.value {
                 if let Some(first) = values.first() {
-                    return first.clone();
+                    if let Value::Var(var) = first {
+                        return var.clone();
+                    }
                 }
             }
         } else if let TableTypes::Reasingment(r) = entry {
@@ -178,8 +181,26 @@ impl ThreeAddressCodeGenerator {
         }
     }
 
-    fn parse_expr(&mut self, tokens: &[String], pos: &mut usize, min_prec: u8, tac_type: Type, target: String) -> String {
-        let mut left = tokens[*pos].clone();
+    fn parse_expr(&mut self, tokens: &[Value], pos: &mut usize, min_prec: u8, tac_type: Type, target: String) -> String {
+        let mut left = {
+            match tokens[*pos].clone() {
+                Value::Var(val) => val,
+                Value::FuncCall(fncall) => {
+                    let tmp = self.next_temp();
+
+                    self.add_function_call(fncall);
+
+                    self.tac_table.push(Tac {
+                        tac_type: Type::GetReturn,
+                        arguments: vec![],
+                        operator: None,
+                        result: Some(tmp),
+                    });
+
+                    tmp
+                } 
+            }
+        };
         *pos += 1;
  
         loop {
@@ -213,7 +234,7 @@ impl ThreeAddressCodeGenerator {
         left
     }
 
-    fn build_expression_chain( &mut self, tokens: Vec<String>, target: String, tac_type: Type) {
+    fn build_expression_chain( &mut self, tokens: Vec<Value>, target: String, tac_type: Type) {
         if tokens.is_empty() {
             return;
         }
@@ -233,6 +254,10 @@ impl ThreeAddressCodeGenerator {
  
         let mut pos = 0;
         let _ = self.parse_expr(&tokens, &mut pos, 0, tac_type.clone(), target);
+    }
+
+    fn get_return_value() {
+
     }
  
     fn add_function(&mut self, function: Function) {
@@ -292,7 +317,7 @@ impl ThreeAddressCodeGenerator {
  
     fn add_reasingment(&mut self, reassignment: Reasingment) {
         let target_ref = Self::symbol_ref(reassignment.target, &reassignment.target_scope);
-        let tokens: Vec<String> = reassignment.parameters.unwrap_or_default().iter().map(Self::extract_operand).collect();
+        let tokens: Vec<Value> = reassignment.parameters.unwrap_or_default().iter().map(Self::extract_operand).collect();
  
         self.build_expression_chain(tokens, target_ref, Type::Reasingment);
         self.tac_table.last_mut().unwrap().result = Some(reassignment.name);
@@ -438,6 +463,9 @@ impl ThreeAddressCodeGenerator {
             Type::Label => {
                 let label = tac.arguments.get(0).map(String::as_str).unwrap_or("?");
                 format!("{pad}{label}:")
+            }
+            Type::GetReturn => {
+                format!("{pad} get return value")
             }
         }
     }
