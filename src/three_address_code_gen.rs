@@ -194,7 +194,7 @@ impl ThreeAddressCodeGenerator {
                         tac_type: Type::GetReturn,
                         arguments: vec![],
                         operator: None,
-                        result: Some(tmp),
+                        result: Some(tmp.clone()),
                     });
 
                     tmp
@@ -205,8 +205,8 @@ impl ThreeAddressCodeGenerator {
  
         loop {
             let op = match tokens.get(*pos) {
-                Some(s) => Operator::from_str(s),
-                None => break,
+                Some(Value::Var(s)) => Operator::from_str(s),
+                _ => break,
             };
  
             let prec = Self::precedence(&op);
@@ -240,7 +240,20 @@ impl ThreeAddressCodeGenerator {
         }
  
         if tokens.len() == 1 {
-            let operand = tokens[0].clone();
+            let operand = match &tokens[0] {
+                Value::Var(s) => s.clone(),
+                Value::FuncCall(f) => {
+                    let tmp = self.next_temp();
+                    self.add_function_call(f.clone());
+                    self.tac_table.push(Tac {
+                        tac_type: Type::GetReturn,
+                        arguments: vec![],
+                        operator: None,
+                        result: Some(tmp.clone()),
+                    });
+                    tmp
+                }
+            };
             
             self.tac_table.push(Tac {
                 tac_type,
@@ -317,7 +330,10 @@ impl ThreeAddressCodeGenerator {
  
     fn add_reasingment(&mut self, reassignment: Reasingment) {
         let target_ref = Self::symbol_ref(reassignment.target, &reassignment.target_scope);
-        let tokens: Vec<Value> = reassignment.parameters.unwrap_or_default().iter().map(Self::extract_operand).collect();
+        let tokens: Vec<Value> = reassignment.parameters.unwrap_or_default().iter().map(|e| match e {
+            TableTypes::FunctionCall(call) => Value::FuncCall(call.clone()),
+            _ => Value::Var(Self::extract_operand(e)),
+        }).collect();
  
         self.build_expression_chain(tokens, target_ref, Type::Reasingment);
         self.tac_table.last_mut().unwrap().result = Some(reassignment.name);
