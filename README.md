@@ -81,7 +81,7 @@
 - [x] Need to be able to pass reasingments as parameters
 - [x] Retun values
 - [x] Need to be able to pass function calls as parameters
-- [ ] Do parameter type checks
+- [x] Do parameter type checks
 - [ ] Add for loop
 - [ ] Check if the operator make sense
 - [ ] Precompile operations is posible

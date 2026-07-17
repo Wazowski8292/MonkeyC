@@ -3,6 +3,12 @@ use crate::variable_types::{Variable, Function, Reasingment, FunctionCall, Condi
 use std::vec::Vec;
 use crate::enbeded_funcs::FUNCTIONS;
 
+struct Entry {
+    word: Word,
+    token: TokenType, 
+    index: Option<(usize, Scope, bool)>,
+}
+
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum TokenType {
     If,
@@ -107,6 +113,19 @@ impl TokenType {
 
     pub fn is_binary_operator(token: TokenType) -> bool {
         token == TokenType::RightBitShift || token == TokenType::LeftBitShift || token == TokenType::And || token == TokenType::Or 
+    }
+
+    fn literal_type(&self) -> Option<TokenType> {
+        match self {
+            TokenType::IntegerLiteral => Some(TokenType::Int),
+            TokenType::FloatLiteral => Some(TokenType::Float),
+            TokenType::StringLiteral => Some(TokenType::String),
+            TokenType::CharLiteral => Some(TokenType::Char),
+            TokenType::BoolLiteral => Some(TokenType::Bool),
+            TokenType::Int | TokenType::Float | TokenType::String
+            | TokenType::Bool | TokenType::Char => Some(*self),
+            _ => None,
+        }
     }
 }
 
@@ -426,7 +445,7 @@ impl SemanticAnalyzer {
             _ => {}
         }
 
-        let mut expected_fc_params = 0;
+        let mut expected_fc_params: usize = 0;
         if is_fc || in_nested_call {
             if let Some(TableTypes::Function(f)) = self.table.get(fc_target) {
                 expected_fc_params = f.parameters.as_ref().map_or(1, |p| p.len());
@@ -443,19 +462,57 @@ impl SemanticAnalyzer {
         
         let in_call = (in_reasignment || in_function_call || in_conditional || in_nested_call) && !last_finished;
         
+        let entry = Entry {
+            word: word,
+            token: token,
+            index: index,
+        };
+
         if !last_finished || self.set_value || in_call {
-            self.handle_argument(word, token, index, in_reasignment, in_function_call, in_nested_call, expected_fc_params, fc_params_len);
+            self.handle_argument(entry, in_reasignment, in_function_call, in_nested_call, expected_fc_params, fc_params_len, fc_target);
         } else {
-            self.handle_new_entry(word, token, index);
+            self.handle_new_entry(entry);
         }
     }
 
-    fn handle_argument(&mut self, word: Word, token: TokenType, index: Option<(usize, Scope, bool)>, in_reasignment: bool, in_function_call: bool, in_nested_call: bool, expected_fc_params: usize, fc_params_len: usize) {
+    fn handle_argument(&mut self, entry_info: Entry, in_reasignment: bool, in_function_call: bool, in_nested_call: bool, expected_fc_params: usize, fc_params_len: usize, fc_target: usize) {
+        let token = entry_info.token.clone();
+        let word = entry_info.word.clone();
+        let index = entry_info.index.clone();
+        
         self.set_value &= TokenType::is_operator(token.clone());
         let in_call_or_reasign = in_reasignment || in_function_call || in_nested_call;
 
-        if (in_function_call || in_nested_call) && fc_params_len >= expected_fc_params {
-            self.error_messages.push(format!("Too many arguments for function call. Expected {}, got {}; Line: {}; Char pos: {}", expected_fc_params, fc_params_len + 1, word.line.unwrap_or(0), word.char_num.unwrap_or(0)));
+        if in_function_call || in_nested_call {
+            if fc_params_len >= expected_fc_params {
+                self.error_messages.push(format!("Too many arguments for function call. Expected {}, got {}; Line: {}; Char pos: {}", expected_fc_params, fc_params_len + 1, entry_info.word.line.unwrap_or(0), word.char_num.unwrap_or(0)));
+            } else {
+                // --- new: parameter type checking ---
+                let expected_type = if let Some(TableTypes::Function(f)) = self.table.get(fc_target) {
+                    f.parameters.as_ref()
+                        .and_then(|params| params.get(fc_params_len))
+                        .and_then(|p| match p {
+                            TableTypes::Variable(v) => Some(v.token_type),
+                            _ => None,
+                        })
+                } else {
+                    None
+                };
+
+                if let Some(expected_type) = expected_type {
+                    let actual_type = token.literal_type().or_else(|| self.declared_type_of(&index));
+
+                    if let Some(actual_type) = actual_type {
+                        if actual_type != expected_type {
+                            self.error_messages.push(format!(
+                                "Type mismatch for argument {} of function call: expected {:?}, got {:?}; Line: {}; Char pos: {}",
+                                fc_params_len + 1, expected_type, actual_type,
+                                word.line.unwrap_or(0), word.char_num.unwrap_or(0)
+                            ));
+                        }
+                    }
+                }
+            }
         }
 
         if in_call_or_reasign && token == TokenType::Unknow && index.is_none() {
@@ -490,6 +547,26 @@ impl SemanticAnalyzer {
         new_entry.add_arguments(argument);
         
         Self::add_caller_info(new_entry, index, word.word);
+    }
+
+    fn declared_type_of(&self, index: &Option<(usize, Scope, bool)>) -> Option<TokenType> {
+        let (idx, scope, _) = index.as_ref()?;
+
+        let entry = match scope {
+            Scope::Root => self.table.get(*idx),
+            Scope::Function | Scope::Parameter => self.table.iter().find_map(|t| {
+                if let TableTypes::Function(f) = t {
+                    f.table.get(*idx)
+                } else {
+                    None
+                }
+            }),
+        };
+
+        match entry {
+            Some(TableTypes::Variable(v)) => Some(v.token_type),
+            _ => None,
+        }
     }
 
     fn add_caller_info(new_entry: &mut TableTypes, index: Option<(usize, Scope, bool)>, word: String) {
@@ -537,7 +614,11 @@ impl SemanticAnalyzer {
         }
     }
 
-    fn handle_new_entry(&mut self, word: Word, token: TokenType, index: Option<(usize, Scope, bool)>) {
+    fn handle_new_entry(&mut self, entry_info: Entry) {
+        let token = entry_info.token.clone();
+        let word = entry_info.word.clone();
+        let index = entry_info.index.clone();
+
         if !TokenType::is_value(token) {
             self.add_entry(token);
         } else if index.is_some() {
