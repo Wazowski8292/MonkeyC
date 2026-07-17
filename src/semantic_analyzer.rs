@@ -350,16 +350,16 @@ impl SemanticAnalyzer {
     }
 
     fn desend_table(defining_parameters: bool, last_table: &mut Vec<TableTypes>, current_nest_level: usize, max_nesting: usize) -> &mut Vec<TableTypes> {
-        let mut has_child = matches!(
+        if let Some(entry) = last_table.last() {
+            if Self::pending_call_in(entry).is_some() {
+                return last_table;
+            }
+        }
+
+        let has_child = matches!(
             last_table.last(),
             Some(TableTypes::Function(_)) | Some(TableTypes::Conditional(_)) | Some(TableTypes::Loop(_))
         );
-
-        if let Some(TableTypes::Variable(returns)) = last_table.last() {
-            if let Some(value) = &returns.value {
-                has_child |= matches!(value.last(), Some(Value::FuncCall(_)));
-            }
-        }
 
         if !has_child || (current_nest_level + 1 > max_nesting ) && !defining_parameters {
             return last_table;
@@ -404,6 +404,7 @@ impl SemanticAnalyzer {
         let mut last_finished = self.active_table().last().map_or(true, |e| e.finished_definition());
         
         let mut is_fc = false;
+        let mut in_nested_call = false;
         let mut fc_target = 0;
         let mut fc_params_len = 0;
 
@@ -415,11 +416,18 @@ impl SemanticAnalyzer {
                 fc_target = fc.target;
                 fc_params_len = fc.parameters.as_ref().map_or(0, |p| p.len());
             }
+            Some(entry @ (TableTypes::Variable(_) | TableTypes::Return(_))) if defining_parameters => {
+                if let Some(pending) = Self::pending_call_in(entry) {
+                    in_nested_call = true;
+                    fc_target = pending.target;
+                    fc_params_len = pending.parameters.as_ref().map_or(0, |p| p.len());
+                }
+            }   
             _ => {}
         }
 
         let mut expected_fc_params = 0;
-        if is_fc {
+        if is_fc || in_nested_call {
             if let Some(TableTypes::Function(f)) = self.table.get(fc_target) {
                 expected_fc_params = f.parameters.as_ref().map_or(1, |p| p.len());
             } else { 
@@ -433,20 +441,20 @@ impl SemanticAnalyzer {
         let in_function_call = matches!(self.active_table().last(), Some(TableTypes::FunctionCall(_))) && self.defining_parameters;
         let in_conditional = matches!(self.active_table().last(), Some(TableTypes::Conditional(_)));
         
-        let in_call = (in_reasignment || in_function_call || in_conditional) && !last_finished;
+        let in_call = (in_reasignment || in_function_call || in_conditional || in_nested_call) && !last_finished;
         
         if !last_finished || self.set_value || in_call {
-            self.handle_argument(word, token, index, in_reasignment, in_function_call, expected_fc_params, fc_params_len);
+            self.handle_argument(word, token, index, in_reasignment, in_function_call, in_nested_call, expected_fc_params, fc_params_len);
         } else {
             self.handle_new_entry(word, token, index);
         }
     }
 
-    fn handle_argument(&mut self, word: Word, token: TokenType, index: Option<(usize, Scope, bool)>, in_reasignment: bool, in_function_call: bool, expected_fc_params: usize, fc_params_len: usize) {
+    fn handle_argument(&mut self, word: Word, token: TokenType, index: Option<(usize, Scope, bool)>, in_reasignment: bool, in_function_call: bool, in_nested_call: bool, expected_fc_params: usize, fc_params_len: usize) {
         self.set_value &= TokenType::is_operator(token.clone());
-        let in_call_or_reasign = in_reasignment || in_function_call;
+        let in_call_or_reasign = in_reasignment || in_function_call || in_nested_call;
 
-        if in_function_call && fc_params_len >= expected_fc_params {
+        if (in_function_call || in_nested_call) && fc_params_len >= expected_fc_params {
             self.error_messages.push(format!("Too many arguments for function call. Expected {}, got {}; Line: {}; Char pos: {}", expected_fc_params, fc_params_len + 1, word.line.unwrap_or(0), word.char_num.unwrap_or(0)));
         }
 
@@ -471,6 +479,14 @@ impl SemanticAnalyzer {
             },
         };
 
+        if in_nested_call {
+            if let Some(fc) = Self::pending_call_in_mut(new_entry) {
+                fc.add_arguments(argument);
+                Self::add_caller_info_on_call(fc, index, word.word);
+                return;
+            }
+        }
+
         new_entry.add_arguments(argument);
         
         Self::add_caller_info(new_entry, index, word.word);
@@ -478,7 +494,34 @@ impl SemanticAnalyzer {
 
     fn add_caller_info(new_entry: &mut TableTypes, index: Option<(usize, Scope, bool)>, word: String) {
         let Some((idx, scope, is_func)) = index else { return };
-        let TableTypes::FunctionCall(fc) = new_entry else { return };
+
+        match new_entry {
+            TableTypes::FunctionCall(fc) => Self::add_caller_info_on_call(fc, Some((idx, scope, is_func)), word),
+            TableTypes::Variable(var) if is_func => Self::promote_pending_var_to_call(var, idx, word),
+            TableTypes::Return(ret) if is_func => {
+                if let Some(var) = ret.value.as_mut() {
+                    Self::promote_pending_var_to_call(var, idx, word);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn promote_pending_var_to_call(variable: &mut Variable, idx: usize, word: String) {
+        let Some(values) = variable.value.as_mut() else { return };
+        let Some(last) = values.last_mut() else { return };
+
+        if let Value::Var(_) = last {
+            *last = Value::FuncCall(FunctionCall {
+                target: idx,
+                parameters: None,
+                name: word,
+            });
+        }
+    }
+
+    fn add_caller_info_on_call(fc: &mut FunctionCall, index: Option<(usize, Scope, bool)>, word: String) {
+        let Some((idx, scope, is_func)) = index else { return };
         let Some(last) = fc.parameters.as_mut().and_then(|p| p.last_mut()) else { return };
         let TableTypes::Reasingment(v) = last else { return };
 
@@ -520,6 +563,22 @@ impl SemanticAnalyzer {
             }
         } else {
             self.error_messages.push(format!("Undefined symbol: {}; Line: {}:{}", word.word, word.line.unwrap_or(0), word.char_num.unwrap_or(0)));
+        }
+    }
+
+    fn pending_call_in(entry: &TableTypes) -> Option<&FunctionCall> {
+        match entry {
+            TableTypes::Variable(v) => v.pending_call(),
+            TableTypes::Return(r) => r.value.as_ref().and_then(|v| v.pending_call()),
+            _ => None,
+        }
+    }
+
+    fn pending_call_in_mut(entry: &mut TableTypes) -> Option<&mut FunctionCall> {
+        match entry {
+            TableTypes::Variable(v) => v.pending_call_mut(),
+            TableTypes::Return(r) => r.value.as_mut().and_then(|v| v.pending_call_mut()),
+            _ => None,
         }
     }
 

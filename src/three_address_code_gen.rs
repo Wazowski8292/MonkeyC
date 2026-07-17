@@ -1,4 +1,4 @@
-use crate::variable_types::{Variable, Function, Reasingment, FunctionCall, Conditional, Loop, Value};
+use crate::variable_types::{Variable, Function, Reasingment, FunctionCall, Conditional, Loop, Return, Value};
 use crate::semantic_analyzer::{TableTypes, Scope};
 
 use std::vec::Vec;
@@ -92,6 +92,7 @@ pub enum Type {
     LoopEnd,
     Label,
     GetReturn,
+    Return,
 }
 
 #[derive(Debug, Clone)]
@@ -128,6 +129,7 @@ impl ThreeAddressCodeGenerator {
                 TableTypes::Reasingment(reassignment) => self.add_reasingment(reassignment.clone()),
                 TableTypes::Conditional(cond) => self.add_conditional(cond.clone()),
                 TableTypes::Loop(lp) => self.add_loop(lp.clone()),
+                TableTypes::Return(returns) => self.add_return(returns.clone()),
                 _ => {}
             }
         }
@@ -395,10 +397,6 @@ impl ThreeAddressCodeGenerator {
         });
     }
 
-    fn add_return(&mut self) {
-
-    }
-
     fn attach_condition_info(&mut self, tac: &mut Tac) {
         if let Some(last) = self.tac_table.last() {
             let is_logical_combinator = matches!(
@@ -419,6 +417,23 @@ impl ThreeAddressCodeGenerator {
                 last.result.clone().unwrap_or_else(|| "0".to_string())
             );
         }
+    }
+
+    fn add_return(&mut self, returns: Return) {
+        let tokens = returns.value.and_then(|v| v.value).unwrap_or_default();
+
+        if tokens.is_empty() {
+            self.tac_table.push(Tac {
+                tac_type: Type::Return,
+                arguments: vec![],
+                operator: None,
+                result: None,
+            });
+            return;
+        }
+
+        let target = self.next_temp();
+        self.build_expression_chain(tokens, target, Type::Return);
     }
 
     pub fn print(&self) {
@@ -445,7 +460,7 @@ impl ThreeAddressCodeGenerator {
             Type::Function => {
                 let name = tac.arguments.get(0).map(String::as_str).unwrap_or("?");
                 let params = tac.arguments.get(2..).unwrap_or(&[]).join(", ");
-                format!("{pad}: function {name}({params})")
+                format!("{pad}function {name}({params})")
             }
             Type::LoopEnd => {
                 let label = tac.arguments.get(0).map(String::as_str).unwrap_or("?");
@@ -476,7 +491,7 @@ impl ThreeAddressCodeGenerator {
                 let args = tac.arguments.get(1..).unwrap_or(&[]).join(", ");
                 format!("{pad}call {target}({args})")
             }
-            Type::Variable | Type::Reasingment => {
+            Type::Variable | Type::Reasingment | Type::Return => {
                 let result = tac.result.as_deref().unwrap_or("?");
                 match (&tac.operator, tac.arguments.as_slice()) {
                     (Some(op), [left, right]) => {
@@ -491,7 +506,7 @@ impl ThreeAddressCodeGenerator {
                 format!("{pad}{label}:")
             }
             Type::GetReturn => {
-                format!("{pad} get return value")
+                format!("{pad}get return value")
             }
         }
     }

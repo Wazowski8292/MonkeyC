@@ -19,6 +19,22 @@ pub struct Variable {
     pub name: Option<String>,
 }
 
+impl Variable {
+    pub fn pending_call(&self) -> Option<&FunctionCall> {
+        match self.value.as_ref()?.last()? {
+            Value::FuncCall(fc) => Some(fc),
+            _ => None,
+        }
+    }
+
+    pub fn pending_call_mut(&mut self) -> Option<&mut FunctionCall> {
+        match self.value.as_mut()?.last_mut()? {
+            Value::FuncCall(fc) => Some(fc),
+            _ => None,
+        }
+    }
+}
+
 impl Types for Variable {
     fn new(token: TokenType) -> Self {
         Self {
@@ -36,12 +52,7 @@ impl Types for Variable {
         if self.name == None {
             self.name = Some(argument);
         } else {
-            if argument.ends_with(";fc") {
-                let og_arg = argument.replace(";fc", "");
-                //TODO self.value.get_or_insert_with(Vec::new).push(Value::FuncCall(argument));
-            } else {
-                self.value.get_or_insert_with(Vec::new).push(Value::Var(argument));
-            }
+            self.value.get_or_insert_with(Vec::new).push(Value::Var(argument));
         }
     }
 }

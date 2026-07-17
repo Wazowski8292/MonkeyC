@@ -40,16 +40,10 @@ impl CodeGen {
     }
      
     pub fn generate(&mut self, tac_table: Vec<Tac>) {
-        let len = tac_table.len();
-        for (i, tac) in tac_table.iter().enumerate() {
+        for (_, tac) in tac_table.iter().enumerate() {
             match tac.tac_type {
                 Type::Variable | Type::Reasingment => self.add_variable(tac),
                 Type::Function => {
-                    if self.current_fn == "main" {
-                        self.add_exit_syscall();
-                    } else if !self.current_fn.is_empty() {
-                        self.add_epilogue();
-                    }
                     self.slot_map.clear();
                     self.offset = 0;
                     self.add_function(tac);
@@ -57,48 +51,18 @@ impl CodeGen {
                 Type::Call => self.add_function_call(tac),
                 Type::Conditional => self.add_conditional(tac),
                 Type::Loop => self.add_loop_start(tac),
-                Type::ConditionalEnd => {
-                    let label = tac.arguments.get(0).map(String::as_str).unwrap_or("?");
-                    self.emit_label(label);
-                    self.emit("");
-                    if i == len - 1 && self.current_fn == "main" {
-                        self.add_exit_syscall();
-                    }
-                }
-                Type::LoopEnd => {
-                    let label = tac.arguments.get(0).map(String::as_str).unwrap_or("?");
-                    // jump back to re-evaluate the condition
-                    self.emit(&format!("    jmp {}_loop", label));
-                    self.emit("");
-                    self.emit_label(label);
-                    self.emit("");
-                    if i == len - 1 && self.current_fn == "main" {
-                        self.add_exit_syscall();
-                    }
-                }
-                Type::Label => {
-                    self.emit_label(&tac.arguments[0]);
-                }
-                Type::GetReturn => {
-                    let t_offset = match self.get_or_alloc_slot(&tac.clone().result.unwrap()) {
-                        Slot::Mem(off) => off,
-                        Slot::Const(_) => panic!("assignment target cannot be a constant"),
-                    };
-
-                    self.emit(&format!("    mov [rbp - {}], rax", t_offset));
-                }
+                Type::ConditionalEnd => self.add_conditional_end(tac),
+                Type::LoopEnd => self.add_loop_end(tac),
+                Type::Label => self.emit_label(&tac.arguments[0]),
+                Type::GetReturn => self.add_get_return(tac),
+                Type::Return => self.add_return(tac),
             }
         }
         if !self.current_fn.is_empty() {
-            let last_needs_epilogue = tac_table.last().map_or(false, |t| {
-                !matches!(t.tac_type, Type::ConditionalEnd | Type::LoopEnd)
-            });
-            if last_needs_epilogue {
-                if self.current_fn == "main" {
-                    self.add_exit_syscall();
-                } else {
-                    self.add_epilogue();
-                }
+            if self.current_fn == "main" {
+                self.add_exit_syscall();
+            } else {
+                self.add_epilogue();
             }
         }
     }
@@ -278,6 +242,31 @@ impl CodeGen {
         }
     }
 
+    fn add_get_return(&mut self, get_return: &Tac) {
+        let t_offset = match self.get_or_alloc_slot(&get_return.clone().result.unwrap()) {
+            Slot::Mem(off) => off,
+            Slot::Const(_) => panic!("assignment target cannot be a constant"),
+        };
+
+        self.emit(&format!("    mov [rbp - {}], rax", t_offset));
+    }
+
+    fn add_return(&mut self, tac: &Tac) {
+        if let Some(value) = &tac.result {
+            self.add_variable(&Tac {tac_type: Type::Variable, arguments: tac.arguments.clone(), operator: tac.operator.clone(), result: tac.result.clone()});
+
+            let slot = self.get_or_alloc_slot(&value);
+            self.emit(&format!("    mov rax, {}", slot.to_asm_op()));
+            self.emit("");
+        }
+
+        if self.current_fn == "main" {
+            self.add_exit_syscall();
+        } else {
+            self.add_epilogue();
+        }
+    }
+
     // Returns values
     fn add_epilogue(&mut self) {
         self.emit("    mov rsp, rbp");
@@ -317,9 +306,24 @@ impl CodeGen {
         self.emit_condition_jump(&label, conditional);
     }
 
+    fn add_conditional_end(&mut self, conditional: &Tac) {
+        let label = conditional.arguments.get(0).map(String::as_str).unwrap_or("?");
+        self.emit_label(label);
+        self.emit("");
+    }
+
     fn add_loop_start(&mut self, loop_tac: &Tac) {
         let label = loop_tac.arguments.get(0).expect("loop TAC needs a label").clone();
         self.emit_condition_jump(&label, loop_tac);
+    }
+
+    fn add_loop_end(&mut self, loop_tac: &Tac) {
+        let label = loop_tac.arguments.get(0).map(String::as_str).unwrap_or("?");
+
+        self.emit(&format!("    jmp {}_loop", label));
+        self.emit("");
+        self.emit_label(label);
+        self.emit("");
     }
 }
 

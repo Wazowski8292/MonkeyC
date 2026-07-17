@@ -79,8 +79,8 @@
 ## Todo
 
 - [x] Need to be able to pass reasingments as parameters
-- [ ] Retun values
-- [ ] Need to be able to pass function calls as parameters
+- [x] Retun values
+- [x] Need to be able to pass function calls as parameters
 - [ ] Do parameter type checks
 - [ ] Add for loop
 - [ ] Check if the operator make sense
