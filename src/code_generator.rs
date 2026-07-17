@@ -206,7 +206,7 @@ impl CodeGen {
         if name == "main" {
             self.emit("main:");
         } else {
-            self.emit(name);
+            self.emit(&format!("{}:", name));
         }
 
         self.emit("    push rbp");

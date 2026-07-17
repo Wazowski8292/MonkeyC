@@ -36,8 +36,12 @@ impl Types for Variable {
         if self.name == None {
             self.name = Some(argument);
         } else {
-
-            self.value.get_or_insert_with(Vec::new).push(Value::Var(argument));
+            if argument.ends_with(";fc") {
+                let og_arg = argument.replace(";fc", "");
+                //TODO self.value.get_or_insert_with(Vec::new).push(Value::FuncCall(argument));
+            } else {
+                self.value.get_or_insert_with(Vec::new).push(Value::Var(argument));
+            }
         }
     }
 }
@@ -197,6 +201,32 @@ impl Types for Loop {
     fn add_arguments(&mut self, argument: String) {
         if let Some(TableTypes::Variable(v)) = self.condition.last_mut() {
             v.add_arguments(argument);
+        }
+    }
+} 
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct Return {
+    pub value: Option<Variable>,
+}
+
+impl Types for Return {
+    fn new(token: TokenType) -> Self {
+        let mut var = Variable::new(token);
+        var.name = Some("_".to_string());
+
+        Self {
+            value: Some(var),
+        }
+    }
+
+    fn finished_definition(&self) -> bool {
+        false
+    }
+
+    fn add_arguments(&mut self, argument: String) {
+        if let Some(_) = self.value.clone() {
+            self.value.as_mut().unwrap().add_arguments(argument);
         }
     }
 } 

@@ -279,10 +279,6 @@ impl ThreeAddressCodeGenerator {
         let _ = self.parse_expr(&tokens, &mut pos, 0, tac_type.clone(), target, true);
     }
 
-    fn get_return_value() {
-
-    }
- 
     fn add_function(&mut self, function: Function) {
         self.memory_alloc = 0;
 
@@ -397,6 +393,10 @@ impl ThreeAddressCodeGenerator {
             operator: None,
             result: None,
         });
+    }
+
+    fn add_return(&mut self) {
+
     }
 
     fn attach_condition_info(&mut self, tac: &mut Tac) {

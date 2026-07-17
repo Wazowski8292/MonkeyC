@@ -1,5 +1,5 @@
 use crate::parser::{Block, Word};
-use crate::variable_types::{Variable, Function, Reasingment, FunctionCall, Conditional, Loop, Types};
+use crate::variable_types::{Variable, Function, Reasingment, FunctionCall, Conditional, Loop, Return, Types, Value};
 use std::vec::Vec;
 use crate::enbeded_funcs::FUNCTIONS;
 
@@ -37,6 +37,7 @@ pub enum TokenType {
     BoolLiteral,
 
     FnLiteral,
+    Return,
 
     WhileLoop,
     
@@ -72,6 +73,7 @@ impl TokenType {
             "|" => TokenType::Or,
 
             "fn" => TokenType::FnLiteral,
+            "return" => TokenType::Return,
 
             "while" => TokenType::WhileLoop,
 
@@ -123,6 +125,7 @@ pub enum TableTypes {
     FunctionCall(FunctionCall),
     Conditional(Conditional),
     Loop(Loop),
+    Return(Return),
     Unknown,
 }
 
@@ -135,6 +138,7 @@ impl TableTypes {
         match token {
             TokenType::Int | TokenType::Float | TokenType::String | TokenType::Bool | TokenType::Char | TokenType::IntegerLiteral | TokenType::FloatLiteral | TokenType::BoolLiteral | TokenType::StringLiteral | TokenType::CharLiteral  => TableTypes::Variable(Variable::new(token)),
             TokenType::FnLiteral => TableTypes::Function(Function::new(token)),
+            TokenType::Return => TableTypes::Return(Return::new(token)),
             TokenType::If | TokenType::Else => TableTypes::Conditional(Conditional::new(token)),
             TokenType::WhileLoop => TableTypes::Loop(Loop::new(token)),
             TokenType::Unknow => TableTypes::Reasingment(Reasingment::new(TokenType::Unknow)),
@@ -150,6 +154,7 @@ impl TableTypes {
             TableTypes::FunctionCall(fc) => fc.finished_definition(),
             TableTypes::Conditional(con) => con.finished_definition(),
             TableTypes::Loop(while_loop) => while_loop.finished_definition(),
+            TableTypes::Return(returns) => returns.finished_definition(),
             _ => {true},
         }
     }
@@ -162,6 +167,7 @@ impl TableTypes {
             TableTypes::FunctionCall(fc) => fc.add_arguments(argument),
             TableTypes::Conditional(con) => con.add_arguments(argument),
             TableTypes::Loop(while_loop) => while_loop.add_arguments(argument),
+            TableTypes::Return(returns) => returns.add_arguments(argument),
             _ => {}
         }
     }
@@ -344,11 +350,16 @@ impl SemanticAnalyzer {
     }
 
     fn desend_table(defining_parameters: bool, last_table: &mut Vec<TableTypes>, current_nest_level: usize, max_nesting: usize) -> &mut Vec<TableTypes> {
-        
-        let has_child = matches!(
+        let mut has_child = matches!(
             last_table.last(),
             Some(TableTypes::Function(_)) | Some(TableTypes::Conditional(_)) | Some(TableTypes::Loop(_))
         );
+
+        if let Some(TableTypes::Variable(returns)) = last_table.last() {
+            if let Some(value) = &returns.value {
+                has_child |= matches!(value.last(), Some(Value::FuncCall(_)));
+            }
+        }
 
         if !has_child || (current_nest_level + 1 > max_nesting ) && !defining_parameters {
             return last_table;
@@ -441,17 +452,26 @@ impl SemanticAnalyzer {
 
         if in_call_or_reasign && token == TokenType::Unknow && index.is_none() {
             self.error_messages.push(format!("Undefined symbol: {}; Line: {}; Char pos: {}", word.word, word.line.unwrap_or(0), word.char_num.unwrap_or(0)));
-            return;
         }
 
+        let mut argument = word.word.clone();
+
         let new_entry = match self.active_table().last_mut() {
-            Some(entry) => entry,
+            Some(entry) => {
+                if let TableTypes::Variable(_) = entry {
+                    if in_function_call {
+                        argument += ";fc";
+                    }
+                }
+                entry
+            },
             None => {
                 self.error_messages.push(("There wasn't a last entry").to_string()); 
                 return; 
             },
         };
-        new_entry.add_arguments(word.word.clone());
+
+        new_entry.add_arguments(argument);
         
         Self::add_caller_info(new_entry, index, word.word);
     }
