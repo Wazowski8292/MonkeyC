@@ -19,9 +19,13 @@ fn main() {
 
     println!("Analyzing semanticly...");
     let type_table = analyze_semantically(parsed_text.expect("parsing failed"));
+    match type_table {
+        Err(len) => {panic!("There {} {} compiler errors. Please fix the compiler error before compiling.", {if len == 1 { "is" } else {"are"}} , len);},
+        _ => {}
+    }
 
     println!("Translating into a three address code...");
-    let tac = generate_three_address_code(type_table);
+    let tac = generate_three_address_code(type_table.expect("Compiler errors"));
 
     println!("Translating into assembly...");
     let asm = generate_assembly(tac);

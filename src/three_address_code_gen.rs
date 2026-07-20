@@ -515,8 +515,6 @@ impl ThreeAddressCodeGenerator {
 pub fn generate_three_address_code(type_table: Vec<TableTypes>) -> Vec<Tac>{
     let mut generator = ThreeAddressCodeGenerator::new();
     generator.generate(type_table);
-    generator.print();
-
-    //println!("{:#?}", generator.tac_table);
+    //generator.print();
     generator.tac_table
 }

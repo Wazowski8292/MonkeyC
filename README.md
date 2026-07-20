@@ -84,6 +84,7 @@
 - [x] Do parameter type checks
 - [ ] Add for loop
 - [ ] Check if the operator make sense
+- [ ] Check if set values makes sense
 - [ ] Precompile operations is posible
  
 ---

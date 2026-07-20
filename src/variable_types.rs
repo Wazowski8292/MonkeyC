@@ -62,6 +62,7 @@ pub struct Function {
     pub parameters: Option<Vec<TableTypes>>,
     pub name: Option<String>,
     pub table: Vec<TableTypes>,
+    pub return_type: Option<TokenType>,
 }
 
 impl Types for Function {
@@ -70,6 +71,7 @@ impl Types for Function {
             parameters: None,
             name: None,
             table: vec![],
+            return_type: None,
         }
     }
 
@@ -81,12 +83,10 @@ impl Types for Function {
         if self.name == None {
             self.name = Some(argument.clone());
         } else {
-            let mut table_type = TableTypes::from_token(TokenType::from_str(&argument));
-
-            if let TableTypes::Variable(ref mut v) = table_type {
-                v.value.get_or_insert_with(Vec::new).push(Value::Var(argument));
+            let token = TokenType::from_str(&argument);
+            if token == TokenType::Bool || token == TokenType::Char || token == TokenType::String || token == TokenType::Int || token == TokenType::Float {
+                self.return_type = Some(token);
             }
-            self.parameters.get_or_insert_with(Vec::new).push(table_type); 
         }
     }
 }

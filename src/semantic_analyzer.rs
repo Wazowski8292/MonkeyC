@@ -44,6 +44,7 @@ pub enum TokenType {
 
     FnLiteral,
     Return,
+    ReturnType,
 
     WhileLoop,
     
@@ -80,6 +81,7 @@ impl TokenType {
 
             "fn" => TokenType::FnLiteral,
             "return" => TokenType::Return,
+            "->" => TokenType::ReturnType,
 
             "while" => TokenType::WhileLoop,
 
@@ -90,6 +92,49 @@ impl TokenType {
             "true" | "false" => TokenType::BoolLiteral,
 
             _ => TokenType::Unknow,
+        }
+    }
+
+    pub fn to_str(&self) -> String {
+        match self {
+            TokenType::If => "if".to_string(),
+            TokenType::Else => "else".to_string(),
+
+            TokenType::Int => "int".to_string(),
+            TokenType::Float => "float".to_string(),
+            TokenType::String => "str".to_string(),
+            TokenType::Bool => "bool".to_string(),
+            TokenType::Char => "char".to_string(),
+
+            TokenType::Plus => "+".to_string(),
+            TokenType::Minus => "-".to_string(),
+            TokenType::Multiplication => "*".to_string(),
+            TokenType::Division => "/".to_string(),
+            TokenType::Equals => "=".to_string(),
+
+            TokenType::LogicalEquals => "==".to_string(),
+            TokenType::LogicalAnd => "&&".to_string(),
+            TokenType::LogicalOr => "||".to_string(),
+            TokenType::Not => "!".to_string(),
+
+            TokenType::RightBitShift => ">>".to_string(),
+            TokenType::LeftBitShift => "<<".to_string(),
+            TokenType::And => "&".to_string(),
+            TokenType::Or => "|".to_string(),
+
+            TokenType::FnLiteral => "fn".to_string(),
+            TokenType::Return => "return".to_string(),
+            TokenType::ReturnType => "->".to_string(),
+
+            TokenType::WhileLoop => "while".to_string(),
+
+            TokenType::IntegerLiteral => "<integer literal>".to_string(),
+            TokenType::FloatLiteral => "<float literal>".to_string(),
+            TokenType::StringLiteral => "<string literal>".to_string(),
+            TokenType::CharLiteral => "<char literal>".to_string(),
+            TokenType::BoolLiteral => "<bool literal>".to_string(),
+
+            TokenType::Unknow => "<unknown>".to_string(),
         }
     }
 
@@ -115,7 +160,7 @@ impl TokenType {
         token == TokenType::RightBitShift || token == TokenType::LeftBitShift || token == TokenType::And || token == TokenType::Or 
     }
 
-    fn literal_type(&self) -> Option<TokenType> {
+    pub fn literal_type(&self) -> Option<TokenType> {
         match self {
             TokenType::IntegerLiteral => Some(TokenType::Int),
             TokenType::FloatLiteral => Some(TokenType::Float),
@@ -196,6 +241,7 @@ struct SemanticAnalyzer {
     table: Vec<TableTypes>,
     error_messages: Vec<String>,
     set_value: bool,
+    set_return_value: bool,
     defining_fn: bool,
     defining_parameters: bool,
     max_nesting: usize,
@@ -207,6 +253,7 @@ impl SemanticAnalyzer {
             table: vec![],
             error_messages: vec![],
             set_value: false,
+            set_return_value: false,
             defining_fn: false,
             defining_parameters: false,
             max_nesting: 1,
@@ -265,7 +312,6 @@ impl SemanticAnalyzer {
     fn is_enbeded_func(name: String) -> bool{
         for func in FUNCTIONS.iter() {
             if func.name == name {
-                println!("Found print");
                 return true;
             }
         }
@@ -417,6 +463,9 @@ impl SemanticAnalyzer {
 
         if token == TokenType::Equals {
             return;
+        } else if token == TokenType::ReturnType {
+            self.set_return_value = true;
+            return;
         }
 
         let index = self.resolve(word.word.clone());
@@ -468,7 +517,7 @@ impl SemanticAnalyzer {
             index: index,
         };
 
-        if !last_finished || self.set_value || in_call {
+        if !last_finished || self.set_value || self.set_return_value || in_call {
             self.handle_argument(entry, in_reasignment, in_function_call, in_nested_call, expected_fc_params, fc_params_len, fc_target);
         } else {
             self.handle_new_entry(entry);
@@ -480,38 +529,15 @@ impl SemanticAnalyzer {
         let word = entry_info.word.clone();
         let index = entry_info.index.clone();
         
+        self.set_return_value = false;
         self.set_value &= TokenType::is_operator(token.clone());
         let in_call_or_reasign = in_reasignment || in_function_call || in_nested_call;
 
         if in_function_call || in_nested_call {
             if fc_params_len >= expected_fc_params {
-                self.error_messages.push(format!("Too many arguments for function call. Expected {}, got {}; Line: {}; Char pos: {}", expected_fc_params, fc_params_len + 1, entry_info.word.line.unwrap_or(0), word.char_num.unwrap_or(0)));
+                self.error_messages.push(format!("Too many arguments for function call. Expected: {}, Found: {}; Line: {}; Char pos: {}", expected_fc_params, fc_params_len + 1, word.line.unwrap_or(0), word.char_num.unwrap_or(0)));
             } else {
-                // --- new: parameter type checking ---
-                let expected_type = if let Some(TableTypes::Function(f)) = self.table.get(fc_target) {
-                    f.parameters.as_ref()
-                        .and_then(|params| params.get(fc_params_len))
-                        .and_then(|p| match p {
-                            TableTypes::Variable(v) => Some(v.token_type),
-                            _ => None,
-                        })
-                } else {
-                    None
-                };
-
-                if let Some(expected_type) = expected_type {
-                    let actual_type = token.literal_type().or_else(|| self.declared_type_of(&index));
-
-                    if let Some(actual_type) = actual_type {
-                        if actual_type != expected_type {
-                            self.error_messages.push(format!(
-                                "Type mismatch for argument {} of function call: expected {:?}, got {:?}; Line: {}; Char pos: {}",
-                                fc_params_len + 1, expected_type, actual_type,
-                                word.line.unwrap_or(0), word.char_num.unwrap_or(0)
-                            ));
-                        }
-                    }
-                }
+                self.check_parameters(entry_info, fc_params_len, fc_target);                
             }
         }
 
@@ -521,18 +547,43 @@ impl SemanticAnalyzer {
 
         let mut argument = word.word.clone();
 
-        let new_entry = match self.active_table().last_mut() {
+        let mut mismatch: Option<(TokenType, Option<TokenType>)> = None;
+        match self.active_table().last_mut() {
             Some(entry) => {
-                if let TableTypes::Variable(_) = entry {
+                if let TableTypes::Variable(var) = entry {
                     if in_function_call {
                         argument += ";fc";
+                    } else {
+                        let value_type = TokenType::from_str(&argument.clone()).literal_type();
+
+                        if let Some(_) = var.name.clone() {
+                            if value_type != Some(var.token_type) {
+                                mismatch = Some((var.token_type, value_type));
+                            }
+                        }
                     }
                 }
-                entry
             },
             None => {
-                self.error_messages.push(("There wasn't a last entry").to_string()); 
-                return; 
+                self.error_messages.push("There wasn't a last entry".to_string());
+                return;
+            },
+        }
+
+        if let Some((expected, found)) = mismatch {
+            self.error_messages.push(format!(
+                "Type mismatch. Expected: {}, Found: {}, Line: {}, Char pos: {}",
+                expected.to_str(),
+                found.unwrap_or(TokenType::Unknow).to_str(),
+                word.line.unwrap_or(0), 
+                word.char_num.unwrap_or(0)));
+        }
+
+        let new_entry = match self.active_table().last_mut() {
+            Some(entry) => entry,
+            None => {
+                self.error_messages.push("There wasn't a last entry".to_string());
+                return;
             },
         };
 
@@ -547,6 +598,37 @@ impl SemanticAnalyzer {
         new_entry.add_arguments(argument);
         
         Self::add_caller_info(new_entry, index, word.word);
+    }
+
+    fn check_parameters(&mut self, entry_info: Entry, fc_params_len: usize, fc_target: usize) {
+        let token = entry_info.token.clone();
+        let word = entry_info.word.clone();
+        let index = entry_info.index.clone();
+
+        let expected_type = if let Some(TableTypes::Function(f)) = self.table.get(fc_target) {
+            f.parameters.as_ref()
+                .and_then(|params| params.get(fc_params_len))
+                .and_then(|p| match p {
+                    TableTypes::Variable(v) => Some(v.token_type),
+                    _ => None,
+                })
+        } else {
+            None
+        };
+
+        if let Some(expected_type) = expected_type {
+            let actual_type = token.literal_type().or_else(|| self.declared_type_of(&index));
+
+            if let Some(actual_type) = actual_type {
+                if actual_type != expected_type {
+                    self.error_messages.push(format!(
+                        "Type mismatch for argument {} of function call: expected {:?}, got {:?}; Line: {}; Char pos: {}",
+                        fc_params_len + 1, expected_type, actual_type,
+                        word.line.unwrap_or(0), word.char_num.unwrap_or(0)
+                    ));
+                }
+            }
+        }
     }
 
     fn declared_type_of(&self, index: &Option<(usize, Scope, bool)>) -> Option<TokenType> {
@@ -670,15 +752,17 @@ impl SemanticAnalyzer {
     }
 }
 
-pub fn analyze_semantically(stack: Vec<Block>) -> Vec<TableTypes>{
+pub fn analyze_semantically(stack: Vec<Block>) -> Result<Vec<TableTypes>, usize>{
     let mut semantic_analyzer: SemanticAnalyzer = SemanticAnalyzer::new();
     semantic_analyzer.analyze(stack);
     
 
-    println!("Semantic analyzer table: {:#?}", semantic_analyzer.table);
-    if semantic_analyzer.error_messages.len() > 0 {
+    //println!("Semantic analyzer table: {:#?}", semantic_analyzer.table);
+    let len = semantic_analyzer.error_messages.len();
+    if len > 0 {
         println!("Semantic analyzer erros msg: {:#?}", semantic_analyzer.error_messages);
+        return Err(len);
     }
 
-    semantic_analyzer.table
+    Ok(semantic_analyzer.table)
 }
