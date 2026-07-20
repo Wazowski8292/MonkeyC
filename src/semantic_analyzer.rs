@@ -16,6 +16,7 @@ pub enum TokenType {
 
     Int,
     Float,
+    Double,
     Bool,
     Char,
     String,
@@ -38,6 +39,7 @@ pub enum TokenType {
     
     IntegerLiteral,
     FloatLiteral,
+    DoubleLiteral,
     CharLiteral,
     StringLiteral,
     BoolLiteral,
@@ -59,6 +61,7 @@ impl TokenType {
 
             "int" => TokenType::Int,
             "float" => TokenType::Float,
+            "double" => TokenType::Double,
             "str" => TokenType::String,
             "bool" => TokenType::Bool,
             "char" => TokenType::Char,
@@ -86,7 +89,9 @@ impl TokenType {
             "while" => TokenType::WhileLoop,
 
             _ if s.parse::<i64>().is_ok() => TokenType::IntegerLiteral,
-            _ if s.parse::<f64>().is_ok() => TokenType::FloatLiteral,
+            _ if (s.ends_with('f') || s.ends_with('F'))
+                && s[..s.len()-1].parse::<f32>().is_ok() => TokenType::FloatLiteral,
+            _ if s.parse::<f64>().is_ok() => TokenType::DoubleLiteral,
             _ if s.len() >= 2 && s.starts_with('"') && s.ends_with('"') => TokenType::StringLiteral,
             _ if s.len() >= 3 && s.starts_with('\'') && s.ends_with('\'') => TokenType::CharLiteral,
             "true" | "false" => TokenType::BoolLiteral,
@@ -102,6 +107,7 @@ impl TokenType {
 
             TokenType::Int => "int".to_string(),
             TokenType::Float => "float".to_string(),
+            TokenType::Double => "double".to_string(),
             TokenType::String => "str".to_string(),
             TokenType::Bool => "bool".to_string(),
             TokenType::Char => "char".to_string(),
@@ -130,6 +136,7 @@ impl TokenType {
 
             TokenType::IntegerLiteral => "<integer literal>".to_string(),
             TokenType::FloatLiteral => "<float literal>".to_string(),
+            TokenType::DoubleLiteral => "<double literal>".to_string(),
             TokenType::StringLiteral => "<string literal>".to_string(),
             TokenType::CharLiteral => "<char literal>".to_string(),
             TokenType::BoolLiteral => "<bool literal>".to_string(),
@@ -140,7 +147,7 @@ impl TokenType {
 
     pub fn is_value(token: TokenType) -> bool {
         token == TokenType::Unknow || token == TokenType::IntegerLiteral || token == TokenType::FloatLiteral ||
-        token == TokenType::BoolLiteral || token ==TokenType::StringLiteral || token ==TokenType::CharLiteral
+        token == TokenType::DoubleLiteral || token == TokenType::BoolLiteral || token ==TokenType::StringLiteral || token ==TokenType::CharLiteral
     }
 
     pub fn is_operator(token: TokenType) -> bool {
@@ -164,11 +171,12 @@ impl TokenType {
         match self {
             TokenType::IntegerLiteral => Some(TokenType::Int),
             TokenType::FloatLiteral => Some(TokenType::Float),
+            TokenType::DoubleLiteral => Some(TokenType::Double),
             TokenType::StringLiteral => Some(TokenType::String),
             TokenType::CharLiteral => Some(TokenType::Char),
             TokenType::BoolLiteral => Some(TokenType::Bool),
-            TokenType::Int | TokenType::Float | TokenType::String
-            | TokenType::Bool | TokenType::Char => Some(*self),
+            TokenType::Int | TokenType::Float | TokenType::Double
+            | TokenType::String | TokenType::Bool | TokenType::Char => Some(*self),
             _ => None,
         }
     }
@@ -200,12 +208,14 @@ impl TableTypes {
         }
 
         match token {
-            TokenType::Int | TokenType::Float | TokenType::String | TokenType::Bool | TokenType::Char | TokenType::IntegerLiteral | TokenType::FloatLiteral | TokenType::BoolLiteral | TokenType::StringLiteral | TokenType::CharLiteral  => TableTypes::Variable(Variable::new(token)),
             TokenType::FnLiteral => TableTypes::Function(Function::new(token)),
             TokenType::Return => TableTypes::Return(Return::new(token)),
             TokenType::If | TokenType::Else => TableTypes::Conditional(Conditional::new(token)),
             TokenType::WhileLoop => TableTypes::Loop(Loop::new(token)),
             TokenType::Unknow => TableTypes::Reasingment(Reasingment::new(TokenType::Unknow)),
+            TokenType::Int | TokenType::Float | TokenType::Double
+            | TokenType::Bool | TokenType::Char | TokenType::String => TableTypes::Variable(Variable::new(token)),
+            _ if TokenType::is_value(token) && token != TokenType::Unknow => TableTypes::Variable(Variable::new(token)),
             _ => TableTypes::Unknown,
         }
     }
@@ -290,7 +300,6 @@ impl SemanticAnalyzer {
                 }
                 Block::Parameter(blocks) => {
                     let prev_defining_fn = self.defining_fn;
-                    //let prev_defining_parameters = self.defining_parameters;
                     self.defining_fn = true;
                     self.defining_parameters = true;
                     self.analyze(blocks.to_vec());
@@ -679,7 +688,6 @@ impl SemanticAnalyzer {
             }
             TableTypes::Reasingment(reasign) if is_func => {
                 let reasign_type = reasign.token_type;
-                // Add the function call as a parameter entry
                 reasign.parameters.get_or_insert_with(Vec::new).push(
                     TableTypes::FunctionCall(FunctionCall { target: idx, parameters: None, name: word })
                 );

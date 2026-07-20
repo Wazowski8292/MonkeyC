@@ -5,10 +5,12 @@ use crate::semantic_analyzer::TokenType;
 use crate::enbeded_funcs::FUNCTIONS;
 
 const ARG_REGS: [&str; 6] = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"];
+const FP_ARG_REGS: [&str; 8] = ["xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5", "xmm6", "xmm7"];
 
 enum Slot {
     Mem(i32),
     Const(String),
+    Data(String),
 }
 
 impl Slot {
@@ -16,26 +18,31 @@ impl Slot {
         match self {
             Slot::Mem(off) => format!("[rbp - {}]", off),
             Slot::Const(val) => val.clone(),
+            Slot::Data(label) => format!("[rel {}]", label),
         }
     }
 }
 
 struct CodeGen {
     file: Vec<String>,
+    rodata: Vec<String>,
     slot_map: HashMap<String, i32>,
     offset: i32,
     current_fn: String,
     enbeded_funcs: Vec<String>,
+    fp_const_count: usize,
 }
 
 impl CodeGen {
     pub fn new() -> Self {
         Self {
             file: vec![],
+            rodata: vec![],
             slot_map: HashMap::new(),
             offset: 0,
             current_fn: String::new(),
             enbeded_funcs: vec![],
+            fp_const_count: 0,
         }
     }
      
@@ -75,6 +82,20 @@ impl CodeGen {
         self.file.push(format!("    {}:", label));
     }
 
+    fn tac_is_float(tac: &Tac) -> bool {
+        matches!(
+            tac.value_type,
+            Some(TokenType::Float) | Some(TokenType::FloatLiteral)
+        )
+    }
+
+    fn tac_is_double(tac: &Tac) -> bool {
+        matches!(
+            tac.value_type,
+            Some(TokenType::Double) | Some(TokenType::DoubleLiteral)
+        )
+    }
+
     fn code_gen_bin_op(&mut self, op: &str, a: Slot, b: Slot, t_offset: i32) {
         self.emit(&format!("    mov rax, {}", a.to_asm_op()));
         self.emit(&format!("    {} rax, {}", op, b.to_asm_op()));
@@ -102,8 +123,56 @@ impl CodeGen {
         self.emit("");
     }
 
+    fn code_gen_f32_bin_op(&mut self, op: &str, a: Slot, b: Slot, t_offset: i32) {
+        self.emit(&format!("    movss xmm0, dword {}", a.to_asm_op()));
+        self.emit(&format!("    movss xmm1, dword {}", b.to_asm_op()));
+        self.emit(&format!("    {} xmm0, xmm1", op));
+        self.emit(&format!("    movss dword [rbp - {}], xmm0", t_offset));
+        self.emit("");
+    }
+
+    fn code_gen_f32_copy(&mut self, a: Slot, t_offset: i32) {
+        self.emit(&format!("    movss xmm0, dword {}", a.to_asm_op()));
+        self.emit(&format!("    movss dword [rbp - {}], xmm0", t_offset));
+        self.emit("");
+    }
+
+    fn code_gen_f64_bin_op(&mut self, op: &str, a: Slot, b: Slot, t_offset: i32) {
+        self.emit(&format!("    movsd xmm0, qword {}", a.to_asm_op()));
+        self.emit(&format!("    movsd xmm1, qword {}", b.to_asm_op()));
+        self.emit(&format!("    {} xmm0, xmm1", op));
+        self.emit(&format!("    movsd qword [rbp - {}], xmm0", t_offset));
+        self.emit("");
+    }
+
+    fn code_gen_f64_copy(&mut self, a: Slot, t_offset: i32) {
+        self.emit(&format!("    movsd xmm0, qword {}", a.to_asm_op()));
+        self.emit(&format!("    movsd qword [rbp - {}], xmm0", t_offset));
+        self.emit("");
+    }
+
     fn get_or_alloc_slot(&mut self, name: &str) -> Slot {
         let token = TokenType::from_str(name);
+
+        if token == TokenType::FloatLiteral {
+            let label = format!("__flt_{}", self.fp_const_count);
+            self.fp_const_count += 1;
+            let val = if name.ends_with('f') || name.ends_with('F') {
+                &name[..name.len()-1]
+            } else {
+                name
+            };
+            self.rodata.push(format!("    {} dd {}", label, val));
+            return Slot::Data(label);
+        }
+
+        if token == TokenType::DoubleLiteral {
+            let label = format!("__dbl_{}", self.fp_const_count);
+            self.fp_const_count += 1;
+            self.rodata.push(format!("    {} dq {}", label, name));
+            return Slot::Data(label);
+        }
+
         if TokenType::is_value(token) && token != TokenType::Unknow {
             if token == TokenType::BoolLiteral {
                 if name == "true" {
@@ -128,13 +197,23 @@ impl CodeGen {
         let t_offset = match self.get_or_alloc_slot(&variable.clone().result.unwrap()) {
             Slot::Mem(off) => off,
             Slot::Const(_) => panic!("assignment target cannot be a constant"),
+            Slot::Data(_) => panic!("assignment target cannot be a rodata label"),
         };
+
+        let is_f32 = Self::tac_is_float(variable);
+        let is_f64 = Self::tac_is_double(variable);
 
         let a_slot = self.get_or_alloc_slot(&variable.arguments[0]);
 
         match &variable.operator {
             None => {
-                self.code_gen_bin_copy(a_slot, t_offset);
+                if is_f32 {
+                    self.code_gen_f32_copy(a_slot, t_offset);
+                } else if is_f64 {
+                    self.code_gen_f64_copy(a_slot, t_offset);
+                } else {
+                    self.code_gen_bin_copy(a_slot, t_offset);
+                }
             }
             Some(Operator::LogicalAnd) => {
                 let b_slot = self.get_or_alloc_slot(&variable.arguments[1]);
@@ -146,16 +225,46 @@ impl CodeGen {
             }
             Some(Operator::LogicalEquals) => {
                 let b_slot = self.get_or_alloc_slot(&variable.arguments[1]);
-                self.emit(&format!("    mov rax, {}", a_slot.to_asm_op()));
-                self.emit(&format!("    cmp rax, {}", b_slot.to_asm_op()));
-                self.emit("    sete al");
-                self.emit("    movzx rax, al");
-                self.emit(&format!("    mov [rbp - {}], rax", t_offset));
-                self.emit("");
+                if is_f32 {
+                    self.emit(&format!("    movss xmm0, dword {}", a_slot.to_asm_op()));
+                    self.emit(&format!("    ucomiss xmm0, dword {}", b_slot.to_asm_op()));
+                    self.emit("    sete al");
+                    self.emit("    movzx rax, al");
+                    self.emit(&format!("    mov [rbp - {}], rax", t_offset));
+                    self.emit("");
+                } else if is_f64 {
+                    self.emit(&format!("    movsd xmm0, qword {}", a_slot.to_asm_op()));
+                    self.emit(&format!("    ucomisd xmm0, qword {}", b_slot.to_asm_op()));
+                    self.emit("    sete al");
+                    self.emit("    movzx rax, al");
+                    self.emit(&format!("    mov [rbp - {}], rax", t_offset));
+                    self.emit("");
+                } else {
+                    self.emit(&format!("    mov rax, {}", a_slot.to_asm_op()));
+                    self.emit(&format!("    cmp rax, {}", b_slot.to_asm_op()));
+                    self.emit("    sete al");
+                    self.emit("    movzx rax, al");
+                    self.emit(&format!("    mov [rbp - {}], rax", t_offset));
+                    self.emit("");
+                }
             }
             Some(op) => {
                 let b_slot = self.get_or_alloc_slot(&variable.arguments[1]);
-                self.code_gen_bin_op(op.to_asm_op().unwrap_or("?"), a_slot, b_slot, t_offset);
+                if is_f32 {
+                    if let Some(asm_op) = op.to_asm_op_f32() {
+                        self.code_gen_f32_bin_op(asm_op, a_slot, b_slot, t_offset);
+                    } else {
+                        self.code_gen_f32_bin_op("addss", a_slot, b_slot, t_offset);
+                    }
+                } else if is_f64 {
+                    if let Some(asm_op) = op.to_asm_op_f64() {
+                        self.code_gen_f64_bin_op(asm_op, a_slot, b_slot, t_offset);
+                    } else {
+                        self.code_gen_f64_bin_op("addsd", a_slot, b_slot, t_offset);
+                    }
+                } else {
+                    self.code_gen_bin_op(op.to_asm_op().unwrap_or("?"), a_slot, b_slot, t_offset);
+                }
             }
         }
     }
@@ -185,7 +294,7 @@ impl CodeGen {
             let slot = self.get_or_alloc_slot(param_name);
             let offset = match slot {
                 Slot::Mem(off) => off,
-                Slot::Const(_) => unreachable!("param name should never be a constant"),
+                Slot::Const(_) | Slot::Data(_) => unreachable!("param name should never be a constant"),
             };
             self.emit(&format!("    mov [rbp - {}], {}", offset, ARG_REGS[i]));
         }
@@ -245,18 +354,39 @@ impl CodeGen {
     fn add_get_return(&mut self, get_return: &Tac) {
         let t_offset = match self.get_or_alloc_slot(&get_return.clone().result.unwrap()) {
             Slot::Mem(off) => off,
-            Slot::Const(_) => panic!("assignment target cannot be a constant"),
+            Slot::Const(_) | Slot::Data(_) => panic!("assignment target cannot be a constant"),
         };
 
-        self.emit(&format!("    mov [rbp - {}], rax", t_offset));
+        if Self::tac_is_float(get_return) {
+            self.emit(&format!("    movss dword [rbp - {}], xmm0", t_offset));
+        } else if Self::tac_is_double(get_return) {
+            self.emit(&format!("    movsd qword [rbp - {}], xmm0", t_offset));
+        } else {
+            self.emit(&format!("    mov [rbp - {}], rax", t_offset));
+        }
     }
 
     fn add_return(&mut self, tac: &Tac) {
-        if let Some(value) = &tac.result {
-            self.add_variable(&Tac {tac_type: Type::Variable, arguments: tac.arguments.clone(), operator: tac.operator.clone(), result: tac.result.clone()});
+        let is_f32 = Self::tac_is_float(tac);
+        let is_f64 = Self::tac_is_double(tac);
 
-            let slot = self.get_or_alloc_slot(&value);
-            self.emit(&format!("    mov rax, {}", slot.to_asm_op()));
+        if let Some(value) = &tac.result {
+            self.add_variable(&Tac {
+                tac_type: Type::Variable,
+                arguments: tac.arguments.clone(),
+                operator: tac.operator.clone(),
+                result: tac.result.clone(),
+                value_type: tac.value_type.clone(),
+            });
+
+            let slot = self.get_or_alloc_slot(value);
+            if is_f32 {
+                self.emit(&format!("    movss xmm0, dword {}", slot.to_asm_op()));
+            } else if is_f64 {
+                self.emit(&format!("    movsd xmm0, qword {}", slot.to_asm_op()));
+            } else {
+                self.emit(&format!("    mov rax, {}", slot.to_asm_op()));
+            }
             self.emit("");
         }
 
@@ -339,11 +469,20 @@ pub fn generate_assembly(tac_table: Vec<Tac>) -> Vec<String> {
         "section .data".to_string(),
         "    fmt_int   db \"%d\", 10, 0".to_string(),
         "".to_string(),
+    ];
+
+    if !code_gen.rodata.is_empty() {
+        out.push("section .rodata".to_string());
+        out.extend(code_gen.rodata);
+        out.push("".to_string());
+    }
+
+    out.extend(vec![
         "section .text".to_string(),
         "    extern printf".to_string(),
         "    global main".to_string(),
         String::new(),
-    ];
+    ]);
     out.extend(code_gen.enbeded_funcs);
     out.extend(code_gen.file);
     out
