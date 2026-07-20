@@ -91,13 +91,13 @@ impl Types for Function {
     }
 }
 
-
 #[derive(Debug, PartialEq, Clone)]
 pub struct Reasingment {
     pub target: usize,
     pub target_scope: Scope,
     pub parameters: Option<Vec<TableTypes>>,
     pub name: String,
+    pub token_type: TokenType,
 }
 
 impl Types for Reasingment {
@@ -107,6 +107,7 @@ impl Types for Reasingment {
             target_scope: Scope::Root,
             parameters: None,
             name: String::new(),
+            token_type: TokenType::Unknow,
         }
     }
 

@@ -553,12 +553,23 @@ impl SemanticAnalyzer {
                 if let TableTypes::Variable(var) = entry {
                     if in_function_call {
                         argument += ";fc";
-                    } else {
+                    } else if !in_nested_call {
                         let value_type = TokenType::from_str(&argument.clone()).literal_type();
 
-                        if let Some(_) = var.name.clone() {
-                            if value_type != Some(var.token_type) {
-                                mismatch = Some((var.token_type, value_type));
+                        if var.name.is_some() {
+                            if let Some(vt) = value_type {
+                                if vt != var.token_type {
+                                    mismatch = Some((var.token_type, Some(vt)));
+                                }
+                            }
+                        }
+                    }
+                } else if let TableTypes::Reasingment(reasign) = entry {
+                    if reasign.token_type != TokenType::Unknow && !in_nested_call {
+                        let value_type = TokenType::from_str(&argument.clone()).literal_type();
+                        if let Some(vt) = value_type {
+                            if vt != reasign.token_type && !TokenType::is_operator(reasign.token_type) {
+                                mismatch = Some((reasign.token_type, Some(vt)));
                             }
                         }
                     }
@@ -579,6 +590,9 @@ impl SemanticAnalyzer {
                 word.char_num.unwrap_or(0)));
         }
 
+        let table_snapshot = self.table.clone();
+        let mut extra_errors: Vec<String> = Vec::new();
+
         let new_entry = match self.active_table().last_mut() {
             Some(entry) => entry,
             None => {
@@ -597,7 +611,9 @@ impl SemanticAnalyzer {
 
         new_entry.add_arguments(argument);
         
-        Self::add_caller_info(new_entry, index, word.word);
+        Self::add_caller_info(new_entry, index, word.word.clone(), &table_snapshot, &mut extra_errors, &word);
+
+        self.error_messages.append(&mut extra_errors);
     }
 
     fn check_parameters(&mut self, entry_info: Entry, fc_params_len: usize, fc_target: usize) {
@@ -651,18 +667,51 @@ impl SemanticAnalyzer {
         }
     }
 
-    fn add_caller_info(new_entry: &mut TableTypes, index: Option<(usize, Scope, bool)>, word: String) {
+    fn add_caller_info(new_entry: &mut TableTypes, index: Option<(usize, Scope, bool)>, word: String, table: &Vec<TableTypes>, error_messages: &mut Vec<String>, call_word: &Word) {
         let Some((idx, scope, is_func)) = index else { return };
 
         match new_entry {
             TableTypes::FunctionCall(fc) => Self::add_caller_info_on_call(fc, Some((idx, scope, is_func)), word),
-            TableTypes::Variable(var) if is_func => Self::promote_pending_var_to_call(var, idx, word),
+            TableTypes::Variable(var) if is_func => {
+                let var_type = var.token_type;
+                Self::promote_pending_var_to_call(var, idx, word);
+                Self::check_func_return_type(error_messages, table, idx, var_type, call_word);
+            }
+            TableTypes::Reasingment(reasign) if is_func => {
+                let reasign_type = reasign.token_type;
+                // Add the function call as a parameter entry
+                reasign.parameters.get_or_insert_with(Vec::new).push(
+                    TableTypes::FunctionCall(FunctionCall { target: idx, parameters: None, name: word })
+                );
+                if reasign_type != TokenType::Unknow {
+                    Self::check_func_return_type(error_messages, table, idx, reasign_type, call_word);
+                }
+            }
             TableTypes::Return(ret) if is_func => {
                 if let Some(var) = ret.value.as_mut() {
                     Self::promote_pending_var_to_call(var, idx, word);
                 }
             }
             _ => {}
+        }
+    }
+
+    fn check_func_return_type(error_messages: &mut Vec<String>, table: &Vec<TableTypes>, func_idx: usize, expected_type: TokenType, word: &Word) {
+        let return_type = table.get(func_idx).and_then(|e| {
+            if let TableTypes::Function(f) = e { f.return_type } else { None }
+        });
+
+        if let Some(ret_type) = return_type {
+            if ret_type != expected_type {
+                error_messages.push(format!(
+                    "Type mismatch: variable is '{}' but function '{}' returns '{}'; Line: {}; Char pos: {}",
+                    expected_type.to_str(),
+                    word.word,
+                    ret_type.to_str(),
+                    word.line.unwrap_or(0),
+                    word.char_num.unwrap_or(0)
+                ));
+            }
         }
     }
 
@@ -716,11 +765,22 @@ impl SemanticAnalyzer {
                 };
                 self.active_table().push(TableTypes::FunctionCall(func_call));
             } else {
+                let target_type = match scope {
+                    Scope::Root => self.table.get(idx),
+                    Scope::Function | Scope::Parameter => self.table.iter().rev().find_map(|t| {
+                        if let TableTypes::Function(f) = t { f.table.get(idx) } else { None }
+                    }),
+                };
+                let token_type = match target_type {
+                    Some(TableTypes::Variable(v)) => v.token_type,
+                    _ => TokenType::Unknow,
+                };
                 let reasign = Reasingment {
                     target: idx,
                     target_scope: scope,
                     parameters: None,
                     name: word.word,
+                    token_type,
                 };
                 self.active_table().push(TableTypes::Reasingment(reasign));
             }
@@ -757,7 +817,7 @@ pub fn analyze_semantically(stack: Vec<Block>) -> Result<Vec<TableTypes>, usize>
     semantic_analyzer.analyze(stack);
     
 
-    //println!("Semantic analyzer table: {:#?}", semantic_analyzer.table);
+    println!("Semantic analyzer table: {:#?}", semantic_analyzer.table);
     let len = semantic_analyzer.error_messages.len();
     if len > 0 {
         println!("Semantic analyzer erros msg: {:#?}", semantic_analyzer.error_messages);
