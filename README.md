@@ -78,11 +78,12 @@
 
 ## Todo
 
-- [x] Need to be able to pass reasingments as parameters
-- [x] Retun values
-- [x] Need to be able to pass function calls as parameters
-- [x] Do parameter type checks
-- [x] Check if set values makes sense
+- [ ] Make it so conditionals/loop dont write in codionion inside of them insted write a variable and call that. Works but is it is only one comparizon it does reasing to the variable.
+- [ ] Fix a bug that happens when you add to return in one function. 
+- [ ] Add Pointers
+- [ ] Add Arrays
+- [ ] Add Chars
+- [ ] Add String
 - [ ] Add for loop
 - [ ] Check if the operator make sense
 - [ ] Precompile operations is posible

@@ -47,7 +47,7 @@ impl Operator {
         }
     }
 
-    fn as_str(&self) -> &'static str {
+    fn _as_str(&self) -> &'static str {
         match self {
             Operator::Plus => "+",
             Operator::Minus => "-",
@@ -468,7 +468,7 @@ impl ThreeAddressCodeGenerator {
         self.build_expression_chain(tokens, target, Type::Return, value_type);
     }
 
-    pub fn print(&self) {
+    pub fn _print(&self) {
         let mut indent: usize = 0;
  
         for tac in &self.tac_table {
@@ -477,7 +477,7 @@ impl ThreeAddressCodeGenerator {
             }
  
             let pad = "    ".repeat(indent);
-            println!("{}", Self::format_tac(tac, &pad));
+            println!("{}", Self::_format_tac(tac, &pad));
  
             if matches!( tac.tac_type, Type::Loop | Type::Conditional ) {
                 indent += 1;
@@ -487,7 +487,7 @@ impl ThreeAddressCodeGenerator {
         }
     }
  
-    fn format_tac(tac: &Tac, pad: &str) -> String {
+    fn _format_tac(tac: &Tac, pad: &str) -> String {
         match &tac.tac_type {
             Type::Function => {
                 let name = tac.arguments.get(0).map(String::as_str).unwrap_or("?");
@@ -501,7 +501,7 @@ impl ThreeAddressCodeGenerator {
             Type::Conditional => {
                 match (&tac.operator, tac.arguments.get(1..).unwrap_or(&[])) {
                     (Some(op), [left, right]) => {
-                        format!("{pad} if ({left} {} {right})", op.as_str())
+                        format!("{pad} if ({left} {} {right})", op._as_str())
                     }
                     (_, rest) => format!("{pad} if ({})", rest.join(", ")),
                 }
@@ -509,7 +509,7 @@ impl ThreeAddressCodeGenerator {
             Type::Loop => {
                 match (&tac.operator, tac.arguments.get(1..).unwrap_or(&[])) {
                     (Some(op), [left, right]) => {
-                        format!("{pad} while ({left} {} {right})", op.as_str())
+                        format!("{pad} while ({left} {} {right})", op._as_str())
                     }
                     (_, rest) => format!("{pad} while ({})", rest.join(", ")),
                 }
@@ -527,7 +527,7 @@ impl ThreeAddressCodeGenerator {
                 let result = tac.result.as_deref().unwrap_or("?");
                 match (&tac.operator, tac.arguments.as_slice()) {
                     (Some(op), [left, right]) => {
-                        format!("{pad}{result} = {left} {} {right}", op.as_str())
+                        format!("{pad}{result} = {left} {} {right}", op._as_str())
                     }
                     (None, [value]) => format!("{pad}{result} = {value}"),
                     _ => format!("{pad}{result} = {:?}", tac.arguments),
@@ -547,6 +547,6 @@ impl ThreeAddressCodeGenerator {
 pub fn generate_three_address_code(type_table: Vec<TableTypes>) -> Vec<Tac>{
     let mut generator = ThreeAddressCodeGenerator::new();
     generator.generate(type_table);
-    //generator.print();
+    generator._print();
     generator.tac_table
 }

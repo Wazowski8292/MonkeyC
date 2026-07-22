@@ -27,6 +27,7 @@ pub const FUNCTIONS: &[PubFuncs] = &[
 "print_float:
     push rbp
     mov rbp, rsp
+    cvtss2sd xmm0, xmm0  
     lea rdi, [rel fmt_float]
     mov eax, 1
     call printf

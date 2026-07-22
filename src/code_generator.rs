@@ -5,7 +5,6 @@ use crate::semantic_analyzer::TokenType;
 use crate::enbeded_funcs::FUNCTIONS;
 
 const ARG_REGS: [&str; 6] = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"];
-const FP_ARG_REGS: [&str; 8] = ["xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5", "xmm6", "xmm7"];
 
 enum Slot {
     Mem(i32),
@@ -26,7 +25,7 @@ impl Slot {
 struct CodeGen {
     file: Vec<String>,
     rodata: Vec<String>,
-    slot_map: HashMap<String, i32>,
+    slot_map: HashMap<String, (i32, TokenType)>,
     offset: i32,
     current_fn: String,
     enbeded_funcs: Vec<String>,
@@ -186,15 +185,16 @@ impl CodeGen {
         }
 
         if let Some(&existing) = self.slot_map.get(name) {
-            return Slot::Mem(-existing);
+            return Slot::Mem(-existing.0);
         }
         self.offset -= 8;
-        self.slot_map.insert(name.to_string(), self.offset);
+        self.slot_map.insert(name.to_string(), (self.offset, TokenType::Unknow));
         Slot::Mem(-self.offset)
     }
 
     fn add_variable(&mut self, variable: &Tac) {
-        let t_offset = match self.get_or_alloc_slot(&variable.clone().result.unwrap()) {
+        let name = variable.clone().result.unwrap();
+        let t_offset = match self.get_or_alloc_slot(&name) {
             Slot::Mem(off) => off,
             Slot::Const(_) => panic!("assignment target cannot be a constant"),
             Slot::Data(_) => panic!("assignment target cannot be a rodata label"),
@@ -204,6 +204,8 @@ impl CodeGen {
         let is_f64 = Self::tac_is_double(variable);
 
         let a_slot = self.get_or_alloc_slot(&variable.arguments[0]);
+
+        self.slot_map.insert(name.to_string(), (-t_offset, TokenType::from_str(&variable.arguments[0])));
 
         match &variable.operator {
             None => {
@@ -318,7 +320,19 @@ impl CodeGen {
                 break; // TODO: Need to implement the ability to pass more parameters
             }
             let slot = self.get_or_alloc_slot(arg_name);
-            self.emit(&format!("    mov {}, {}", ARG_REGS[i], slot.to_asm_op()));
+            let arg = ARG_REGS[i];
+
+            let (_, tok) = self.slot_map.get(arg_name).unwrap_or(&(0, TokenType::Unknow));
+            let is_f32 = matches!(tok, TokenType::Float | TokenType::FloatLiteral);
+            let is_f64 = matches!(tok, TokenType::Double | TokenType::DoubleLiteral);
+
+            if is_f32 {
+                self.emit(&format!("    movss xmm{}, dword {}", i, slot.to_asm_op()));
+            } else if is_f64 {
+                self.emit(&format!("    movsd xmm{}, qword {}", i, slot.to_asm_op()));
+            } else {
+                self.emit(&format!("    mov {}, {}", arg, slot.to_asm_op()));
+            }
         }
 
         self.emit(&format!("    call {}", name));
@@ -468,7 +482,7 @@ pub fn generate_assembly(tac_table: Vec<Tac>) -> Vec<String> {
         "".to_string(),
         "section .data".to_string(),
         "    fmt_int    db \"%d\", 10, 0".to_string(),
-        "    fmt_float    db \"%d\", 10, 0".to_string(),
+        "    fmt_float    db \"%f\", 10, 0".to_string(),
         "    fmt_bool   db \"%s\", 10, 0".to_string(),
         "    fmt_char   db \"%c\", 10, 0".to_string(),
         "    fmt_string db \"%s\", 10, 0".to_string(),
