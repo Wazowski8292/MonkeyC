@@ -20,7 +20,7 @@ fn main() {
     println!("Analyzing semanticly...");
     let type_table = analyze_semantically(parsed_text.expect("parsing failed"));
     match type_table {
-        Err(len) => {println!("There {} {} compiler errors. Please fix the compiler error before compiling.", {if len == 1 { "is" } else {"are"}} , len); return;},
+        Err(len) => {println!("There {} {} compiler error{}. Please fix the compiler error{} before compiling.", {if len == 1 { "is" } else {"are"}} , len, {if len == 1 { "" } else {"s"}}, {if len == 1 { "" } else {"s"}} ); return;},
         _ => {}
     }
 

@@ -187,6 +187,7 @@ pub enum Scope {
     Root,
     Function,
     Parameter,
+    EnbedFunc,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -318,17 +319,22 @@ impl SemanticAnalyzer {
         }
     }
 
-    fn is_enbeded_func(name: String) -> bool{
+    fn is_enbeded_func(name: String) -> (bool, usize){
+        let mut i = 0;
         for func in FUNCTIONS.iter() {
             if func.name == name {
-                return true;
+                println!("name: {}", func.name);
+                return (true, i);
             }
+
+            i += 1;
         }
 
-        false
+        (false, 0)
     }
 
     fn find_in_level(name: &str, table: &Vec<TableTypes>, nest_level: usize) -> Option<(usize, Scope, bool)> {
+        let (is_enbeded_func, index) = Self::is_enbeded_func(name.to_string());
         table.iter().enumerate().find_map(|(idx, entry)| match entry {
             TableTypes::Variable(v) if v.name.as_deref() == Some(name) => {
                 Some((idx, Self::scope_for_level(nest_level), false))
@@ -336,7 +342,7 @@ impl SemanticAnalyzer {
             TableTypes::Function(f) if f.name.as_deref() == Some(name) => {
                 Some((idx, Self::scope_for_level(nest_level), true))
             }
-            _ if Self::is_enbeded_func(name.to_string()) => Some((0, Scope::Function, true)),
+            _ if is_enbeded_func => Some((index, Scope::EnbedFunc, true)),
             _ => None,
         })
     }
@@ -483,6 +489,7 @@ impl SemanticAnalyzer {
         let mut is_fc = false;
         let mut in_nested_call = false;
         let mut fc_target = 0;
+        let mut fc_scope = Scope::Root;
         let mut fc_params_len = 0;
 
         let defining_parameters = self.defining_parameters;
@@ -491,6 +498,7 @@ impl SemanticAnalyzer {
             Some(TableTypes::FunctionCall(fc)) if defining_parameters => {
                 is_fc = true;
                 fc_target = fc.target;
+                fc_scope = fc.scope;
                 fc_params_len = fc.parameters.as_ref().map_or(0, |p| p.len());
             }
             Some(entry @ (TableTypes::Variable(_) | TableTypes::Return(_))) if defining_parameters => {
@@ -503,12 +511,12 @@ impl SemanticAnalyzer {
             _ => {}
         }
 
-        let mut expected_fc_params: usize = 0;
+        let mut expected_fc_params = 0;
         if is_fc || in_nested_call {
-            if let Some(TableTypes::Function(f)) = self.table.get(fc_target) {
-                expected_fc_params = f.parameters.as_ref().map_or(1, |p| p.len());
-            } else { 
-                expected_fc_params = 0; 
+            if fc_scope == Scope::EnbedFunc {
+                expected_fc_params = FUNCTIONS[fc_target].parameters.len();
+            } else if let Some(TableTypes::Function(f)) = self.table.get(fc_target) {
+                expected_fc_params = f.parameters.as_ref().map_or(0, |p| p.len());
             }
 
             last_finished = false;
@@ -643,6 +651,7 @@ impl SemanticAnalyzer {
 
         if let Some(expected_type) = expected_type {
             let actual_type = token.literal_type().or_else(|| self.declared_type_of(&index));
+            println!("PArameter check {}; target {}", actual_type.clone().expect("Error").to_str(), fc_target.clone());
 
             if let Some(actual_type) = actual_type {
                 if actual_type != expected_type {
@@ -668,6 +677,9 @@ impl SemanticAnalyzer {
                     None
                 }
             }),
+            Scope::EnbedFunc => {
+                todo!()
+            }
         };
 
         match entry {
@@ -683,13 +695,13 @@ impl SemanticAnalyzer {
             TableTypes::FunctionCall(fc) => Self::add_caller_info_on_call(fc, Some((idx, scope, is_func)), word),
             TableTypes::Variable(var) if is_func => {
                 let var_type = var.token_type;
-                Self::promote_pending_var_to_call(var, idx, word);
+                Self::promote_pending_var_to_call(var, idx, word, scope);
                 Self::check_func_return_type(error_messages, table, idx, var_type, call_word);
             }
             TableTypes::Reasingment(reasign) if is_func => {
                 let reasign_type = reasign.token_type;
                 reasign.parameters.get_or_insert_with(Vec::new).push(
-                    TableTypes::FunctionCall(FunctionCall { target: idx, parameters: None, name: word })
+                    TableTypes::FunctionCall(FunctionCall { target: idx, parameters: None, name: word , scope: scope})
                 );
                 if reasign_type != TokenType::Unknow {
                     Self::check_func_return_type(error_messages, table, idx, reasign_type, call_word);
@@ -697,7 +709,7 @@ impl SemanticAnalyzer {
             }
             TableTypes::Return(ret) if is_func => {
                 if let Some(var) = ret.value.as_mut() {
-                    Self::promote_pending_var_to_call(var, idx, word);
+                    Self::promote_pending_var_to_call(var, idx, word, scope);
                 }
             }
             _ => {}
@@ -723,7 +735,7 @@ impl SemanticAnalyzer {
         }
     }
 
-    fn promote_pending_var_to_call(variable: &mut Variable, idx: usize, word: String) {
+    fn promote_pending_var_to_call(variable: &mut Variable, idx: usize, word: String, scope: Scope) {
         let Some(values) = variable.value.as_mut() else { return };
         let Some(last) = values.last_mut() else { return };
 
@@ -732,6 +744,7 @@ impl SemanticAnalyzer {
                 target: idx,
                 parameters: None,
                 name: word,
+                scope: scope,
             });
         }
     }
@@ -746,6 +759,7 @@ impl SemanticAnalyzer {
                 target: idx,
                 parameters: None,
                 name: word,
+                scope: scope,
             });
         } else {
             v.target = idx;
@@ -770,6 +784,7 @@ impl SemanticAnalyzer {
                     target: idx,
                     parameters: None,
                     name: word.word,
+                    scope: scope,
                 };
                 self.active_table().push(TableTypes::FunctionCall(func_call));
             } else {
@@ -778,6 +793,7 @@ impl SemanticAnalyzer {
                     Scope::Function | Scope::Parameter => self.table.iter().rev().find_map(|t| {
                         if let TableTypes::Function(f) = t { f.table.get(idx) } else { None }
                     }),
+                    Scope::EnbedFunc => todo!()
                 };
                 let token_type = match target_type {
                     Some(TableTypes::Variable(v)) => v.token_type,

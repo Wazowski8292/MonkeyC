@@ -467,7 +467,13 @@ pub fn generate_assembly(tac_table: Vec<Tac>) -> Vec<String> {
         "bits 64".to_string(),
         "".to_string(),
         "section .data".to_string(),
-        "    fmt_int   db \"%d\", 10, 0".to_string(),
+        "    fmt_int    db \"%d\", 10, 0".to_string(),
+        "    fmt_float    db \"%d\", 10, 0".to_string(),
+        "    fmt_bool   db \"%s\", 10, 0".to_string(),
+        "    fmt_char   db \"%c\", 10, 0".to_string(),
+        "    fmt_string db \"%s\", 10, 0".to_string(),
+        "    str_true   db \"true\", 0".to_string(),
+        "    str_false  db \"false\", 0".to_string(),
         "".to_string(),
     ];
 

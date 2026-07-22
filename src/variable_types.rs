@@ -133,6 +133,7 @@ pub struct FunctionCall {
     pub target: usize,
     pub parameters: Option<Vec<TableTypes>>,
     pub name: String,
+    pub scope: Scope,
 }
 
 impl Types for FunctionCall {
@@ -141,6 +142,7 @@ impl Types for FunctionCall {
             target: 0,
             parameters: None,
             name: String::new(),
+            scope: Scope::Root,
         }
     }
 

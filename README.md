@@ -82,9 +82,9 @@
 - [x] Retun values
 - [x] Need to be able to pass function calls as parameters
 - [x] Do parameter type checks
+- [x] Check if set values makes sense
 - [ ] Add for loop
 - [ ] Check if the operator make sense
-- [x] Check if set values makes sense
 - [ ] Precompile operations is posible
  
 ---
