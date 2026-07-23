@@ -443,20 +443,6 @@ impl ThreeAddressCodeGenerator {
 
     fn attach_condition_info(&mut self, tac: &mut Tac) {
         if let Some(last) = self.tac_table.last() {
-            let is_logical_combinator = matches!(
-                last.operator,
-                Some(Operator::LogicalAnd) | Some(Operator::LogicalOr)
-            );
-
-            if !is_logical_combinator {
-                if let (Some(op), [left, right]) = (&last.operator, last.arguments.as_slice()) {
-                    tac.operator = Some(op.clone());
-                    tac.arguments.push(left.clone());
-                    tac.arguments.push(right.clone());
-                    return;
-                }
-            }
-
             tac.arguments.push(
                 last.result.clone().unwrap_or_else(|| "0".to_string())
             );
