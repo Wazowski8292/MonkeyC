@@ -5,6 +5,7 @@ use crate::semantic_analyzer::TokenType;
 use crate::enbeded_funcs::FUNCTIONS;
 
 const ARG_REGS: [&str; 6] = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"];
+const FP_ARG_REGS: [&str; 8] = ["xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5", "xmm6", "xmm7"];
 
 enum Slot {
     Mem(i32),
@@ -188,7 +189,7 @@ impl CodeGen {
             return Slot::Mem(-existing.0);
         }
         self.offset -= 8;
-        self.slot_map.insert(name.to_string(), (self.offset, TokenType::Unknow));
+        self.slot_map.insert(name.to_string(), (self.offset, token));
         Slot::Mem(-self.offset)
     }
 
@@ -289,16 +290,30 @@ impl CodeGen {
         self.emit(&format!("    sub rsp, {}", memory_alloc));
         self.emit("");
 
+        let mut int_i = 0;
+        let mut fp_i = 0;
         for (i, param_name) in params.iter().enumerate() {
             if i >= ARG_REGS.len() {
                 break;  // TODO: Need to implement this.
             }
-            let slot = self.get_or_alloc_slot(param_name);
-            let offset = match slot {
-                Slot::Mem(off) => off,
-                Slot::Const(_) | Slot::Data(_) => unreachable!("param name should never be a constant"),
-            };
-            self.emit(&format!("    mov [rbp - {}], {}", offset, ARG_REGS[i]));
+            
+            self.offset -= 8;
+            let offset = self.offset;
+            self.slot_map.insert(param_name.clone(), (offset, param_type.clone()));
+
+            let is_f32 = matches!(param_type, TokenType::Float);
+            let is_f64 = matches!(param_type, TokenType::Double);
+
+            if is_f32 {
+                self.emit(&format!("    movss dword [rbp - {}], {}", -offset, FP_ARG_REGS[fp_i]));
+                fp_i += 1;
+            } else if is_f64 {
+                self.emit(&format!("    movsd qword [rbp - {}], {}", -offset, FP_ARG_REGS[fp_i]));
+                fp_i += 1;
+            } else {
+                self.emit(&format!("    mov [rbp - {}], {}", -offset, ARG_REGS[int_i]));
+                int_i += 1;
+            }
         }
         self.emit("");
     }

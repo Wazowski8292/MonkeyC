@@ -181,7 +181,7 @@ impl Types for Conditional {
     }
 
     fn finished_definition(&self) -> bool {
-        false
+        !self.table.is_empty()
     }
 
     fn add_arguments(&mut self, argument: String) {
@@ -209,7 +209,7 @@ impl Types for Loop {
     }
 
     fn finished_definition(&self) -> bool {
-        false
+        !self.table.is_empty()
     }
 
     fn add_arguments(&mut self, argument: String) {

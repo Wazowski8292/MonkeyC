@@ -286,8 +286,9 @@ impl SemanticAnalyzer {
                     }
                 }
                 Block::Collection(blocks) => {
-                    self.max_nesting += 1;
                     let last_is_fn = matches!(self.active_table().last(), Some(TableTypes::Function(_)));
+                    self.max_nesting += 1;
+
                     
                     if last_is_fn && !self.defining_fn {
                         self.defining_fn = true;
@@ -323,7 +324,6 @@ impl SemanticAnalyzer {
         let mut i = 0;
         for func in FUNCTIONS.iter() {
             if func.name == name {
-                println!("name: {}", func.name);
                 return (true, i);
             }
 
@@ -441,7 +441,7 @@ impl SemanticAnalyzer {
             Some(TableTypes::Function(_)) | Some(TableTypes::Conditional(_)) | Some(TableTypes::Loop(_))
         );
 
-        if !has_child || (current_nest_level + 1 > max_nesting ) && !defining_parameters {
+        if !has_child || (current_nest_level == max_nesting ) && !defining_parameters {
             return last_table;
         }
 
@@ -651,7 +651,6 @@ impl SemanticAnalyzer {
 
         if let Some(expected_type) = expected_type {
             let actual_type = token.literal_type().or_else(|| self.declared_type_of(&index));
-            println!("PArameter check {}; target {}", actual_type.clone().expect("Error").to_str(), fc_target.clone());
 
             if let Some(actual_type) = actual_type {
                 if actual_type != expected_type {
