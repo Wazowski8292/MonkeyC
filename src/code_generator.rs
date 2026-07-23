@@ -31,6 +31,8 @@ struct CodeGen {
     current_fn: String,
     enbeded_funcs: Vec<String>,
     fp_const_count: usize,
+    param_int_idx: usize,
+    param_fp_idx: usize,
 }
 
 impl CodeGen {
@@ -43,6 +45,8 @@ impl CodeGen {
             current_fn: String::new(),
             enbeded_funcs: vec![],
             fp_const_count: 0,
+            param_int_idx: 0,
+            param_fp_idx: 0,
         }
     }
      
@@ -53,8 +57,11 @@ impl CodeGen {
                 Type::Function => {
                     self.slot_map.clear();
                     self.offset = 0;
+                    self.param_int_idx = 0;
+                    self.param_fp_idx = 0;
                     self.add_function(tac);
                 }
+                Type::Param => self.add_param(tac),
                 Type::Call => self.add_function_call(tac),
                 Type::Conditional => self.add_conditional(tac),
                 Type::Loop => self.add_loop_start(tac),
@@ -201,12 +208,14 @@ impl CodeGen {
             Slot::Data(_) => panic!("assignment target cannot be a rodata label"),
         };
 
-        let is_f32 = Self::tac_is_float(variable);
-        let is_f64 = Self::tac_is_double(variable);
+        let a_arg = &variable.arguments[0];
+        let a_tok = self.slot_map.get(a_arg).map(|(_, t)| *t).unwrap_or_else(|| TokenType::from_str(a_arg));
+        let is_f32 = Self::tac_is_float(variable) || matches!(a_tok, TokenType::Float | TokenType::FloatLiteral);
+        let is_f64 = Self::tac_is_double(variable) || matches!(a_tok, TokenType::Double | TokenType::DoubleLiteral);
 
         let a_slot = self.get_or_alloc_slot(&variable.arguments[0]);
 
-        self.slot_map.insert(name.to_string(), (-t_offset, TokenType::from_str(&variable.arguments[0])));
+        self.slot_map.insert(name.to_string(), (-t_offset, a_tok));
 
         match &variable.operator {
             None => {
@@ -275,7 +284,6 @@ impl CodeGen {
     fn add_function(&mut self, function: &Tac) {
         let name = function.arguments.get(0).map(String::as_str).unwrap_or("?");
         let memory_alloc = function.arguments.get(1).map(String::as_str).unwrap_or("?");
-        let params: Vec<String> = function.arguments.iter().skip(2).cloned().collect();
 
         self.current_fn = name.to_string();
 
@@ -289,40 +297,43 @@ impl CodeGen {
         self.emit("    mov rbp, rsp");
         self.emit(&format!("    sub rsp, {}", memory_alloc));
         self.emit("");
+    }
 
-        let mut int_i = 0;
-        let mut fp_i = 0;
-        for (i, param_name) in params.iter().enumerate() {
-            if i >= ARG_REGS.len() {
-                break;  // TODO: Need to implement this.
+    fn add_param(&mut self, param: &Tac) {
+        let param_name = param.arguments.get(0).map(String::as_str).unwrap_or("?");
+        let param_type = param.value_type.unwrap_or(TokenType::Int);
+
+        self.offset -= 8;
+        let offset = self.offset;
+        self.slot_map.insert(param_name.to_string(), (offset, param_type));
+
+        let is_f32 = matches!(param_type, TokenType::Float);
+        let is_f64 = matches!(param_type, TokenType::Double);
+
+        if is_f32 {
+            if self.param_fp_idx < FP_ARG_REGS.len() {
+                self.emit(&format!("    movss dword [rbp - {}], {}", -offset, FP_ARG_REGS[self.param_fp_idx]));
+                self.param_fp_idx += 1;
             }
-            
-            self.offset -= 8;
-            let offset = self.offset;
-            self.slot_map.insert(param_name.clone(), (offset, param_type.clone()));
-
-            let is_f32 = matches!(param_type, TokenType::Float);
-            let is_f64 = matches!(param_type, TokenType::Double);
-
-            if is_f32 {
-                self.emit(&format!("    movss dword [rbp - {}], {}", -offset, FP_ARG_REGS[fp_i]));
-                fp_i += 1;
-            } else if is_f64 {
-                self.emit(&format!("    movsd qword [rbp - {}], {}", -offset, FP_ARG_REGS[fp_i]));
-                fp_i += 1;
-            } else {
-                self.emit(&format!("    mov [rbp - {}], {}", -offset, ARG_REGS[int_i]));
-                int_i += 1;
+        } else if is_f64 {
+            if self.param_fp_idx < FP_ARG_REGS.len() {
+                self.emit(&format!("    movsd qword [rbp - {}], {}", -offset, FP_ARG_REGS[self.param_fp_idx]));
+                self.param_fp_idx += 1;
+            }
+        } else {
+            if self.param_int_idx < ARG_REGS.len() {
+                self.emit(&format!("    mov [rbp - {}], {}", -offset, ARG_REGS[self.param_int_idx]));
+                self.param_int_idx += 1;
             }
         }
-        self.emit("");
     }
 
     fn add_exit_syscall(&mut self) {
-        self.emit("    ; exit(0)");
-        self.emit("    mov rax, 60");
-        self.emit("    xor rdi, rdi");
-        self.emit("    syscall");
+        self.emit("    ; exit main");
+        self.emit("    mov rax, 0");
+        self.emit("    mov rsp, rbp");
+        self.emit("    pop rbp");
+        self.emit("    ret");
         self.emit("");
     }
 
@@ -330,23 +341,31 @@ impl CodeGen {
         let name = call.arguments.get(0).map(String::as_str).unwrap_or("?");
         let arg_names: Vec<String> = call.arguments.iter().skip(1).cloned().collect();
 
-        for (i, arg_name) in arg_names.iter().enumerate() {
-            if i >= ARG_REGS.len() {
-                break; // TODO: Need to implement the ability to pass more parameters
-            }
-            let slot = self.get_or_alloc_slot(arg_name);
-            let arg = ARG_REGS[i];
+        let mut int_i = 0;
+        let mut fp_i = 0;
 
-            let (_, tok) = self.slot_map.get(arg_name).unwrap_or(&(0, TokenType::Unknow));
+        for arg_name in arg_names.iter() {
+            let slot = self.get_or_alloc_slot(arg_name);
+
+            let tok = self.slot_map.get(arg_name).map(|(_, t)| *t).unwrap_or_else(|| TokenType::from_str(arg_name));
             let is_f32 = matches!(tok, TokenType::Float | TokenType::FloatLiteral);
             let is_f64 = matches!(tok, TokenType::Double | TokenType::DoubleLiteral);
 
             if is_f32 {
-                self.emit(&format!("    movss xmm{}, dword {}", i, slot.to_asm_op()));
+                if fp_i < FP_ARG_REGS.len() {
+                    self.emit(&format!("    movss {}, dword {}", FP_ARG_REGS[fp_i], slot.to_asm_op()));
+                    fp_i += 1;
+                }
             } else if is_f64 {
-                self.emit(&format!("    movsd xmm{}, qword {}", i, slot.to_asm_op()));
+                if fp_i < FP_ARG_REGS.len() {
+                    self.emit(&format!("    movsd {}, qword {}", FP_ARG_REGS[fp_i], slot.to_asm_op()));
+                    fp_i += 1;
+                }
             } else {
-                self.emit(&format!("    mov {}, {}", arg, slot.to_asm_op()));
+                if int_i < ARG_REGS.len() {
+                    self.emit(&format!("    mov {}, {}", ARG_REGS[int_i], slot.to_asm_op()));
+                    int_i += 1;
+                }
             }
         }
 
@@ -440,8 +459,22 @@ impl CodeGen {
                 let a_slot = self.get_or_alloc_slot(left);
                 let b_slot = self.get_or_alloc_slot(right);
 
-                self.emit(&format!("    mov rax, {}", a_slot.to_asm_op()));
-                self.emit(&format!("    cmp rax, {}", b_slot.to_asm_op()));
+                let a_tok = self.slot_map.get(left).map(|(_, t)| *t).unwrap_or_else(|| TokenType::from_str(left));
+                let b_tok = self.slot_map.get(right).map(|(_, t)| *t).unwrap_or_else(|| TokenType::from_str(right));
+
+                let is_f32 = matches!(a_tok, TokenType::Float | TokenType::FloatLiteral) || matches!(b_tok, TokenType::Float | TokenType::FloatLiteral);
+                let is_f64 = matches!(a_tok, TokenType::Double | TokenType::DoubleLiteral) || matches!(b_tok, TokenType::Double | TokenType::DoubleLiteral);
+
+                if is_f32 {
+                    self.emit(&format!("    movss xmm0, dword {}", a_slot.to_asm_op()));
+                    self.emit(&format!("    ucomiss xmm0, dword {}", b_slot.to_asm_op()));
+                } else if is_f64 {
+                    self.emit(&format!("    movsd xmm0, qword {}", a_slot.to_asm_op()));
+                    self.emit(&format!("    ucomisd xmm0, qword {}", b_slot.to_asm_op()));
+                } else {
+                    self.emit(&format!("    mov rax, {}", a_slot.to_asm_op()));
+                    self.emit(&format!("    cmp rax, {}", b_slot.to_asm_op()));
+                }
 
                 let jump_mnemonic = match op {
                     Operator::LogicalEquals => "jne",
@@ -451,9 +484,25 @@ impl CodeGen {
             }
             (_, [value]) => {
                 let slot = self.get_or_alloc_slot(value);
-                self.emit(&format!("    mov rax, {}", slot.to_asm_op()));
-                self.emit("    test rax, rax");
-                self.emit(&format!("    je {}", label));
+                let tok = self.slot_map.get(value).map(|(_, t)| *t).unwrap_or_else(|| TokenType::from_str(value));
+                let is_f32 = matches!(tok, TokenType::Float | TokenType::FloatLiteral);
+                let is_f64 = matches!(tok, TokenType::Double | TokenType::DoubleLiteral);
+
+                if is_f32 {
+                    self.emit(&format!("    movss xmm0, dword {}", slot.to_asm_op()));
+                    self.emit("    xorps xmm1, xmm1");
+                    self.emit("    ucomiss xmm0, xmm1");
+                    self.emit(&format!("    je {}", label));
+                } else if is_f64 {
+                    self.emit(&format!("    movsd xmm0, qword {}", slot.to_asm_op()));
+                    self.emit("    xorpd xmm1, xmm1");
+                    self.emit("    ucomisd xmm0, xmm1");
+                    self.emit(&format!("    je {}", label));
+                } else {
+                    self.emit(&format!("    mov rax, {}", slot.to_asm_op()));
+                    self.emit("    test rax, rax");
+                    self.emit(&format!("    je {}", label));
+                }
             }
             _ => panic!("TAC has no usable condition"),
         }

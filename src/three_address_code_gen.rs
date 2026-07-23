@@ -103,6 +103,7 @@ impl Operator {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
     Function,
+    Param,
     Variable,
     Call,
     Reasingment,
@@ -129,6 +130,7 @@ struct ThreeAddressCodeGenerator {
     temp_count: usize,
     label_count: usize,
     memory_alloc: usize,
+    current_return_type: Option<TokenType>,
 }
 
 impl ThreeAddressCodeGenerator {
@@ -138,6 +140,7 @@ impl ThreeAddressCodeGenerator {
             temp_count: 0,
             label_count: 0,
             memory_alloc: 0,
+            current_return_type: None,
         }
     }
 
@@ -308,6 +311,7 @@ impl ThreeAddressCodeGenerator {
 
     fn add_function(&mut self, function: Function) {
         self.memory_alloc = 0;
+        self.current_return_type = function.return_type;
 
         let tac = Tac {
             tac_type: Type::Function,
@@ -320,13 +324,23 @@ impl ThreeAddressCodeGenerator {
         self.tac_table.push(tac);
         let function_def_index = self.tac_table.len() - 1;
 
+        for parameter in function.parameters.unwrap_or_default() {
+            let (param_name, param_type) = match &parameter {
+                TableTypes::Variable(var) => (var.name.clone().unwrap_or_default(), Some(var.token_type)),
+                _ => (Self::extract_operand(&parameter), None),
+            };
+            self.tac_table.push(Tac {
+                tac_type: Type::Param,
+                arguments: vec![param_name],
+                operator: None,
+                result: None,
+                value_type: param_type,
+            });
+        }
+
         self.generate(function.table);
 
         self.tac_table[function_def_index].arguments.push(self.memory_alloc.to_string());
-        
-        for parameter in function.parameters.unwrap_or_default() {
-            self.tac_table[function_def_index].arguments.push(Self::extract_operand(&parameter));
-        }
     }
  
     fn add_variable(&mut self, variable: Variable) {
@@ -450,7 +464,7 @@ impl ThreeAddressCodeGenerator {
     }
 
     fn add_return(&mut self, returns: Return) {
-        let value_type = returns.value.as_ref().map(|v| v.token_type);
+        let value_type = self.current_return_type.or_else(|| returns.value.as_ref().map(|v| v.token_type));
         let tokens = returns.value.and_then(|v| v.value).unwrap_or_default();
 
         if tokens.is_empty() {
@@ -459,7 +473,7 @@ impl ThreeAddressCodeGenerator {
                 arguments: vec![],
                 operator: None,
                 result: None,
-                value_type: None,
+                value_type: self.current_return_type,
             });
             return;
         }
@@ -491,8 +505,12 @@ impl ThreeAddressCodeGenerator {
         match &tac.tac_type {
             Type::Function => {
                 let name = tac.arguments.get(0).map(String::as_str).unwrap_or("?");
-                let params = tac.arguments.get(2..).unwrap_or(&[]).join(", ");
-                format!("{pad}function {name}({params})")
+                format!("{pad}function {name}")
+            }
+            Type::Param => {
+                let name = tac.arguments.get(0).map(String::as_str).unwrap_or("?");
+                let ty = tac.value_type.map_or("unknown".to_string(), |t| t.to_str());
+                format!("{pad}param {ty} {name}")
             }
             Type::LoopEnd => {
                 let label = tac.arguments.get(0).map(String::as_str).unwrap_or("?");
