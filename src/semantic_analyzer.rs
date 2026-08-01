@@ -579,40 +579,36 @@ impl SemanticAnalyzer {
             self.error_messages.push(format!("Undefined symbol: {}; Line: {}; Char pos: {}", word.word, word.line.unwrap_or(0), word.char_num.unwrap_or(0)));
         }
 
-        let mut argument = word.word.clone();
-
         let mut mismatch: Option<(TokenType, Option<TokenType>)> = None;
         match self.active_table().last_mut() {
-            Some(entry) => {
-                if let TableTypes::Variable(var) = entry {
-                    if in_function_call {
-                        argument += ";fc";
-                    } else if !in_nested_call {
-                        let value_type = TokenType::from_str(&argument.clone()).literal_type();
+            Some(TableTypes::Variable(var)) => {
+                if !in_nested_call {
+                    let value_type = TokenType::from_str(&word.word.clone()).literal_type();
 
-                        if var.name.is_some() {
-                            if let Some(vt) = value_type {
-                                if vt != var.token_type {
-                                    mismatch = Some((var.token_type, Some(vt)));
-                                }
-                            }
-                        }
-                    }
-                } else if let TableTypes::Reasingment(reasign) = entry {
-                    if reasign.token_type != TokenType::Unknow && !in_nested_call {
-                        let value_type = TokenType::from_str(&argument.clone()).literal_type();
+                    if var.name.is_some() {
                         if let Some(vt) = value_type {
-                            if vt != reasign.token_type && !TokenType::is_operator(reasign.token_type) {
-                                mismatch = Some((reasign.token_type, Some(vt)));
+                            if vt != var.token_type {
+                                mismatch = Some((var.token_type, Some(vt)));
                             }
                         }
                     }
                 }
-            },
+            }
+            Some(TableTypes::Reasingment(reasign)) => {
+                 if reasign.token_type != TokenType::Unknow && !in_nested_call {
+                    let value_type = TokenType::from_str(&word.word.clone()).literal_type();
+                    if let Some(vt) = value_type {
+                        if vt != reasign.token_type && !TokenType::is_operator(reasign.token_type) {
+                            mismatch = Some((reasign.token_type, Some(vt)));
+                        }
+                    }
+                }
+            }
             None => {
                 self.error_messages.push("There wasn't a last entry".to_string());
                 return;
-            },
+            }
+            _ => {}
         }
 
         if let Some((expected, found)) = mismatch {
@@ -637,13 +633,13 @@ impl SemanticAnalyzer {
 
         if in_nested_call {
             if let Some(fc) = Self::pending_call_in_mut(new_entry) {
-                fc.add_arguments(argument);
+                fc.add_arguments(word.word.clone());
                 Self::add_caller_info_on_call(fc, index, word.word);
                 return;
             }
         }
 
-        new_entry.add_arguments(argument);
+        new_entry.add_arguments(word.word.clone());
         
         Self::add_caller_info(new_entry, index, word.word.clone(), &table_snapshot, &mut extra_errors, &word);
 
