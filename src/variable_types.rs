@@ -13,10 +13,17 @@ pub enum Value {
 }
 
 #[derive(Debug, PartialEq, Clone)]
+pub enum PointerType {
+    Pointer,
+    Reference,
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub struct Variable {
     pub token_type: TokenType,
     pub value: Option<Vec<Value>>,
     pub name: Option<String>,
+    pub ptr: Option<PointerType>,
 }
 
 impl Variable {
@@ -41,6 +48,7 @@ impl Types for Variable {
             token_type: token,
             value: None,
             name: None,
+            ptr: None,
         }
     }
 
@@ -98,6 +106,23 @@ pub struct Reasingment {
     pub parameters: Option<Vec<TableTypes>>,
     pub name: String,
     pub token_type: TokenType,
+    pub ptr: Option<PointerType>,
+}
+
+impl Reasingment {
+    pub fn pending_call(&self) -> Option<&FunctionCall> {
+        match self.parameters.as_ref()?.last()? {
+            TableTypes::FunctionCall(fc) => Some(fc),
+            _ => None,
+        }
+    }
+
+    pub fn pending_call_mut(&mut self) -> Option<&mut FunctionCall> {
+        match self.parameters.as_mut()?.last_mut()? {
+            TableTypes::FunctionCall(fc) => Some(fc),
+            _ => None,
+        }
+    }
 }
 
 impl Types for Reasingment {
@@ -108,6 +133,7 @@ impl Types for Reasingment {
             parameters: None,
             name: String::new(),
             token_type: TokenType::Unknow,
+            ptr: None,
         }
     }
 

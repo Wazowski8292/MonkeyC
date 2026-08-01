@@ -1,4 +1,4 @@
-use crate::variable_types::{Variable, Function, Reasingment, FunctionCall, Conditional, Loop, Return, Value};
+use crate::variable_types::{Variable, Function, Reasingment, FunctionCall, Conditional, Loop, Return, Value, PointerType};
 use crate::semantic_analyzer::{TableTypes, Scope, TokenType};
 
 use std::vec::Vec;
@@ -105,6 +105,9 @@ pub enum Type {
     Function,
     Param,
     Variable,
+    AddressOf,
+    Deref,
+    DerefAssign,
     Call,
     Reasingment,
     Conditional,
@@ -355,7 +358,14 @@ impl ThreeAddressCodeGenerator {
 
         let value_type = Some(variable.token_type);
         let tokens = variable.value.unwrap_or_default();
-        self.build_expression_chain(tokens, name, Type::Variable, value_type);
+
+        let tac_type = match &variable.ptr {
+            Some(PointerType::Reference) => Type::AddressOf,
+            Some(PointerType::Pointer)   => Type::Deref,
+            None                         => Type::Variable,
+        };
+
+        self.build_expression_chain(tokens, name, tac_type, value_type);
 
         self.memory_alloc += (self.temp_count - last_temp + 1) * 16; //TODO: this should depend on the variable and need to remember that before calling a function that it should be a multiple of 16
     }
@@ -383,6 +393,21 @@ impl ThreeAddressCodeGenerator {
             TableTypes::FunctionCall(call) => Value::FuncCall(call.clone()),
             _ => Value::Var(Self::extract_operand(e)),
         }).collect();
+
+        if reassignment.ptr == Some(PointerType::Pointer) {
+            let value_arg = tokens.into_iter().next().map(|v| match v {
+                Value::Var(s) => s,
+                Value::FuncCall(f) => f.name,
+            }).unwrap_or_default();
+            self.tac_table.push(Tac {
+                tac_type: Type::DerefAssign,
+                arguments: vec![reassignment.name.clone(), value_arg],
+                operator: None,
+                result: Some(reassignment.name),
+                value_type,
+            });
+            return;
+        }
  
         self.build_expression_chain(tokens, target_ref, Type::Reasingment, value_type);
         self.tac_table.last_mut().unwrap().result = Some(reassignment.name);
@@ -470,7 +495,7 @@ impl ThreeAddressCodeGenerator {
 
     pub fn _print(&self) {
         let mut indent: usize = 0;
- 
+        println!("\n---------------------- \n");
         for tac in &self.tac_table {
             if matches!(tac.tac_type, Type::LoopEnd | Type::ConditionalEnd | Type::Function) {
                 indent = indent.saturating_sub(1);
@@ -485,6 +510,7 @@ impl ThreeAddressCodeGenerator {
                 indent = 1;
             }
         }
+        println!("\n---------------------- \n");
     }
  
     fn _format_tac(tac: &Tac, pad: &str) -> String {
@@ -536,6 +562,21 @@ impl ThreeAddressCodeGenerator {
                     (None, [value]) => format!("{pad}{result} = {value}"),
                     _ => format!("{pad}{result} = {:?}", tac.arguments),
                 }
+            }
+            Type::AddressOf => {
+                let result = tac.result.as_deref().unwrap_or("?");
+                let src = tac.arguments.get(0).map(String::as_str).unwrap_or("?");
+                format!("{pad}{result} = &{src}")
+            }
+            Type::Deref => {
+                let result = tac.result.as_deref().unwrap_or("?");
+                let src = tac.arguments.get(0).map(String::as_str).unwrap_or("?");
+                format!("{pad}{result} = *{src}")
+            }
+            Type::DerefAssign => {
+                let ptr = tac.arguments.get(0).map(String::as_str).unwrap_or("?");
+                let val = tac.arguments.get(1).map(String::as_str).unwrap_or("?");
+                format!("{pad}*{ptr} = {val}")
             }
             Type::Label => {
                 let label = tac.arguments.get(0).map(String::as_str).unwrap_or("?");

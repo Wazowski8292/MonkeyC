@@ -1,5 +1,5 @@
 use crate::parser::{Block, Word};
-use crate::variable_types::{Variable, Function, Reasingment, FunctionCall, Conditional, Loop, Return, Types, Value};
+use crate::variable_types::{Variable, Function, Reasingment, FunctionCall, Conditional, Loop, Return, Types, Value, PointerType};
 use std::vec::Vec;
 use crate::enbeded_funcs::FUNCTIONS;
 
@@ -256,6 +256,7 @@ struct SemanticAnalyzer {
     defining_fn: bool,
     defining_parameters: bool,
     max_nesting: usize,
+    ptr_type: Option<PointerType>,
 }
 
 impl SemanticAnalyzer {
@@ -268,6 +269,7 @@ impl SemanticAnalyzer {
             defining_fn: false,
             defining_parameters: false,
             max_nesting: 1,
+            ptr_type: None,
         }
     }
 
@@ -417,7 +419,13 @@ impl SemanticAnalyzer {
     }
 
     fn add_entry(&mut self, token: TokenType) {
-        let table_type: TableTypes = TableTypes::from_token(token);
+        let mut table_type: TableTypes = TableTypes::from_token(token);
+        match table_type {
+            TableTypes::Variable(ref mut var) => var.ptr = self.ptr_type.clone(),
+            TableTypes::Reasingment(ref mut re) => re.ptr = self.ptr_type.clone(),
+            _ => {}
+        }
+
         self.active_table().push(table_type)
     }
 
@@ -471,7 +479,13 @@ impl SemanticAnalyzer {
         }
     }
 
-    fn tokenize_word(&mut self, word: Word) {
+    fn tokenize_word(&mut self, mut word: Word) {
+        match word.word.clone().chars().next() {
+            Some('&') => { self.ptr_type = Some(PointerType::Reference); word.word = word.word.replace("&", ""); }
+            Some('*') => { self.ptr_type = Some(PointerType::Pointer); word.word = word.word.replace("*", ""); }
+            _ => self.ptr_type = None,
+        }
+
         let token = TokenType::from_str(&word.word);
 
         self.set_value |= TokenType::is_operator(token.clone());
@@ -541,7 +555,9 @@ impl SemanticAnalyzer {
         }
     }
 
-    fn handle_argument(&mut self, entry_info: Entry, in_reasignment: bool, in_function_call: bool, in_nested_call: bool, expected_fc_params: usize, fc_params_len: usize, fc_target: usize) {
+    fn handle_argument(&mut self, entry_info: Entry, in_reasignment: bool, in_function_call: bool, in_nested_call: bool,
+        expected_fc_params: usize, fc_params_len: usize, fc_target: usize) {
+
         let token = entry_info.token.clone();
         let word = entry_info.word.clone();
         let index = entry_info.index.clone();
@@ -552,7 +568,8 @@ impl SemanticAnalyzer {
 
         if in_function_call || in_nested_call {
             if fc_params_len >= expected_fc_params {
-                self.error_messages.push(format!("Too many arguments for function call. Expected: {}, Found: {}; Line: {}; Char pos: {}", expected_fc_params, fc_params_len + 1, word.line.unwrap_or(0), word.char_num.unwrap_or(0)));
+                self.error_messages.push(format!("Too many arguments for function call. Expected: {}, Found: {}; Line: {}; Char pos: {}", 
+                    expected_fc_params, fc_params_len + 1, word.line.unwrap_or(0), word.char_num.unwrap_or(0)));
             } else {
                 self.check_parameters(entry_info, fc_params_len, fc_target);                
             }
@@ -687,7 +704,9 @@ impl SemanticAnalyzer {
         }
     }
 
-    fn add_caller_info(new_entry: &mut TableTypes, index: Option<(usize, Scope, bool)>, word: String, table: &Vec<TableTypes>, error_messages: &mut Vec<String>, call_word: &Word) {
+    fn add_caller_info(new_entry: &mut TableTypes, index: Option<(usize, Scope, bool)>, word: String, 
+        table: &Vec<TableTypes>, error_messages: &mut Vec<String>, call_word: &Word) {
+        
         let Some((idx, scope, is_func)) = index else { return };
 
         match new_entry {
@@ -699,9 +718,20 @@ impl SemanticAnalyzer {
             }
             TableTypes::Reasingment(reasign) if is_func => {
                 let reasign_type = reasign.token_type;
-                reasign.parameters.get_or_insert_with(Vec::new).push(
-                    TableTypes::FunctionCall(FunctionCall { target: idx, parameters: None, name: word , scope: scope})
-                );
+                if let Some(last) = reasign.parameters.as_mut().and_then(|p| p.last_mut()) {
+                    if let TableTypes::Reasingment(_) = last {
+                        *last = TableTypes::FunctionCall(FunctionCall {
+                        target: idx,
+                        parameters: None,
+                        name: word,
+                        scope: scope,
+                        });
+                    }
+                } else {
+                    reasign.parameters.get_or_insert_with(Vec::new).push(
+                    TableTypes::FunctionCall(FunctionCall { target: idx, parameters: None, name: word, scope: scope })
+                    );
+                }
                 if reasign_type != TokenType::Unknow {
                     Self::check_func_return_type(error_messages, table, idx, reasign_type, call_word);
                 }
@@ -787,6 +817,7 @@ impl SemanticAnalyzer {
                 };
                 self.active_table().push(TableTypes::FunctionCall(func_call));
             } else {
+                println!("Reasingment {}", word.word);
                 let target_type = match scope {
                     Scope::Root => self.table.get(idx),
                     Scope::Function | Scope::Parameter => self.table.iter().rev().find_map(|t| {
@@ -804,6 +835,7 @@ impl SemanticAnalyzer {
                     parameters: None,
                     name: word.word,
                     token_type,
+                    ptr: self.ptr_type.clone(),
                 };
                 self.active_table().push(TableTypes::Reasingment(reasign));
             }
@@ -815,6 +847,7 @@ impl SemanticAnalyzer {
     fn pending_call_in(entry: &TableTypes) -> Option<&FunctionCall> {
         match entry {
             TableTypes::Variable(v) => v.pending_call(),
+            TableTypes::Reasingment(re) => re.pending_call(),
             TableTypes::Return(r) => r.value.as_ref().and_then(|v| v.pending_call()),
             _ => None,
         }
@@ -823,6 +856,7 @@ impl SemanticAnalyzer {
     fn pending_call_in_mut(entry: &mut TableTypes) -> Option<&mut FunctionCall> {
         match entry {
             TableTypes::Variable(v) => v.pending_call_mut(),
+            TableTypes::Reasingment(re) => re.pending_call_mut(),
             TableTypes::Return(r) => r.value.as_mut().and_then(|v| v.pending_call_mut()),
             _ => None,
         }
@@ -838,9 +872,10 @@ impl SemanticAnalyzer {
 pub fn analyze_semantically(stack: Vec<Block>) -> Result<Vec<TableTypes>, usize>{
     let mut semantic_analyzer: SemanticAnalyzer = SemanticAnalyzer::new();
     semantic_analyzer.analyze(stack);
-    
 
+    println!("\n---------------------- \n");
     println!("Semantic analyzer table: {:#?}", semantic_analyzer.table);
+    println!("\n---------------------- \n");
     let len = semantic_analyzer.error_messages.len();
     if len > 0 {
         println!("Semantic analyzer erros msg: {:#?}", semantic_analyzer.error_messages);

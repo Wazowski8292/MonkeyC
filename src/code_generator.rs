@@ -54,6 +54,9 @@ impl CodeGen {
         for (_, tac) in tac_table.iter().enumerate() {
             match tac.tac_type {
                 Type::Variable | Type::Reasingment => self.add_variable(tac),
+                Type::AddressOf => self.add_address_of(tac),
+                Type::Deref => self.add_deref(tac),
+                Type::DerefAssign => self.add_deref_assign(tac),
                 Type::Function => {
                     self.slot_map.clear();
                     self.offset = 0;
@@ -397,6 +400,80 @@ impl CodeGen {
                 return;
             }
         }
+    }
+
+    fn add_address_of(&mut self, tac: &Tac) {
+        // result = &src  →  lea rax, [rbp - src_offset]; mov [rbp - dst_offset], rax
+        let dst_name = tac.result.as_deref().unwrap_or("");
+        let src_name = tac.arguments.get(0).map(String::as_str).unwrap_or("");
+
+        // Alloc destination slot first
+        let dst_offset = match self.get_or_alloc_slot(dst_name) {
+            Slot::Mem(off) => off,
+            _ => panic!("address-of destination must be a memory slot"),
+        };
+        // Resolve source slot (must already exist or be newly allocated)
+        let src_offset = match self.get_or_alloc_slot(src_name) {
+            Slot::Mem(off) => off,
+            _ => panic!("address-of source must be a memory slot"),
+        };
+
+        self.emit(&format!("    lea rax, [rbp - {}]", src_offset));
+        self.emit(&format!("    mov [rbp - {}], rax", dst_offset));
+        self.emit("");
+    }
+
+    fn add_deref(&mut self, tac: &Tac) {
+        // `result = *ptr`
+        // Two cases:
+        //   1. ptr is a named pointer variable in slot_map → actual dereference (double-load).
+        //   2. ptr is a literal / constant (e.g. `*int b = 5` declaration) → plain copy.
+        let dst_name = tac.result.as_deref().unwrap_or("");
+        let ptr_name = tac.arguments.get(0).map(String::as_str).unwrap_or("");
+
+        let dst_offset = match self.get_or_alloc_slot(dst_name) {
+            Slot::Mem(off) => off,
+            _ => panic!("dereference destination must be a memory slot"),
+        };
+
+        // Check whether the source is a literal/constant (not a named variable)
+        let is_literal = {
+            let tok = TokenType::from_str(ptr_name);
+            TokenType::is_value(tok) && tok != TokenType::Unknow
+        };
+
+        if is_literal || !self.slot_map.contains_key(ptr_name) {
+            // pointer-typed declaration with a literal RHS — just copy the value
+            let val_slot = self.get_or_alloc_slot(ptr_name);
+            self.code_gen_bin_copy(val_slot, dst_offset);
+        } else {
+            // Real dereference: load the pointer, then load through it
+            let ptr_offset = match self.get_or_alloc_slot(ptr_name) {
+                Slot::Mem(off) => off,
+                _ => panic!("dereference source must be a memory slot"),
+            };
+            self.emit(&format!("    mov rax, [rbp - {}]", ptr_offset)); // load pointer
+            self.emit("    mov rax, [rax]");                              // dereference
+            self.emit(&format!("    mov [rbp - {}], rax", dst_offset));  // store result
+            self.emit("");
+        }
+    }
+
+    fn add_deref_assign(&mut self, tac: &Tac) {
+        // *ptr = value  →  mov rax, [rbp - ptr_offset]; mov rbx, value_slot; mov [rax], rbx
+        let ptr_name = tac.arguments.get(0).map(String::as_str).unwrap_or("");
+        let val_name = tac.arguments.get(1).map(String::as_str).unwrap_or("");
+
+        let ptr_offset = match self.get_or_alloc_slot(ptr_name) {
+            Slot::Mem(off) => off,
+            _ => panic!("deref-assign pointer must be a memory slot"),
+        };
+        let val_slot = self.get_or_alloc_slot(val_name);
+
+        self.emit(&format!("    mov rax, [rbp - {}]", ptr_offset));  // load address stored in pointer var
+        self.emit(&format!("    mov rbx, {}", val_slot.to_asm_op())); // load value
+        self.emit("    mov [rax], rbx");                               // write through pointer
+        self.emit("");
     }
 
     fn add_get_return(&mut self, get_return: &Tac) {
