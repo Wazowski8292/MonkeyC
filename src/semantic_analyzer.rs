@@ -549,14 +549,14 @@ impl SemanticAnalyzer {
         };
 
         if !last_finished || self.set_value || self.set_return_value || in_call {
-            self.handle_argument(entry, in_reasignment, in_function_call, in_nested_call, expected_fc_params, fc_params_len, fc_target);
+            self.handle_argument(entry, in_reasignment, in_function_call, in_nested_call, expected_fc_params, fc_params_len, fc_target, fc_scope);
         } else {
             self.handle_new_entry(entry);
         }
     }
 
     fn handle_argument(&mut self, entry_info: Entry, in_reasignment: bool, in_function_call: bool, in_nested_call: bool,
-        expected_fc_params: usize, fc_params_len: usize, fc_target: usize) {
+        expected_fc_params: usize, fc_params_len: usize, fc_target: usize, fc_scope: Scope) {
 
         let token = entry_info.token.clone();
         let word = entry_info.word.clone();
@@ -571,7 +571,7 @@ impl SemanticAnalyzer {
                 self.error_messages.push(format!("Too many arguments for function call. Expected: {}, Found: {}; Line: {}; Char pos: {}", 
                     expected_fc_params, fc_params_len + 1, word.line.unwrap_or(0), word.char_num.unwrap_or(0)));
             } else {
-                self.check_parameters(entry_info, fc_params_len, fc_target);                
+                self.check_parameters(entry_info, fc_params_len, fc_target, fc_scope);                
             }
         }
 
@@ -651,29 +651,42 @@ impl SemanticAnalyzer {
 
     fn add_pointer_info(&mut self) {
         let ptr_type = self.ptr_type.clone();
-        if let Some(TableTypes::Reasingment(last)) = self.active_table().last_mut() {
-            match last.parameters.as_mut().and_then(|v| v.last_mut()) {
-                Some(TableTypes::Reasingment(reasign)) => reasign.ptr = ptr_type,
-                _ => {}
+        match self.active_table().last_mut() {
+            Some(TableTypes::Reasingment(last)) => {
+                if let Some(TableTypes::Reasingment(reasign)) = last.parameters.as_mut().and_then(|v| v.last_mut()) {
+                    reasign.ptr = ptr_type;
+                }
             }
-        }    
+            Some(TableTypes::FunctionCall(fc)) => {
+                if let Some(TableTypes::Reasingment(reasign)) = fc.parameters.as_mut().and_then(|v| v.last_mut()) {
+                    reasign.ptr = ptr_type;
+                }
+            }
+            _ => {}
+        }
     }
 
 
-    fn check_parameters(&mut self, entry_info: Entry, fc_params_len: usize, fc_target: usize) {
+    fn check_parameters(&mut self, entry_info: Entry, fc_params_len: usize, fc_target: usize, fc_scope: Scope) {
+        // Embedded functions have no user-defined parameter table; skip pointer/type checks.
+        if fc_scope == Scope::EnbedFunc {
+            return;
+        }
+
         let token = entry_info.token.clone();
         let word = entry_info.word.clone();
         let index = entry_info.index.clone();
 
-        let expected_type = if let Some(TableTypes::Function(f)) = self.table.get(fc_target) {
+        let (expected_type, expected_ptr) = if let Some(TableTypes::Function(f)) = self.table.get(fc_target) {
             f.parameters.as_ref()
                 .and_then(|params| params.get(fc_params_len))
-                .and_then(|p| match p {
-                    TableTypes::Variable(v) => Some(v.token_type),
-                    _ => None,
+                .map(|p| match p {
+                    TableTypes::Variable(v) => (Some(v.token_type), v.ptr.clone()),
+                    _ => (None, None),
                 })
+                .unwrap_or((None, None))
         } else {
-            None
+            (None, None)
         };
 
         if let Some(expected_type) = expected_type {
@@ -688,6 +701,35 @@ impl SemanticAnalyzer {
                     ));
                 }
             }
+
+            let actual_ptr = self.ptr_type.clone();
+            let ptr_ok = match (&expected_ptr, &actual_ptr) {
+                // *T param: caller uses &var (reference = address-of)
+                (Some(PointerType::Pointer), Some(PointerType::Reference)) => true,
+                // plain T param: caller uses *ptr (deref) or plain var
+                (None, Some(PointerType::Pointer)) => true,
+                (None, None) => true,
+                // exact match always ok
+                (a, b) => a == b,
+            };
+
+            if !ptr_ok {
+                let expected_str = match &expected_ptr {
+                    Some(PointerType::Pointer) => "pointer (*T) — pass with &var",
+                    Some(PointerType::Reference) => "reference (&T)",
+                    None => "plain value",
+                };
+                let actual_str = match &actual_ptr {
+                    Some(PointerType::Pointer) => "dereference (*var)",
+                    Some(PointerType::Reference) => "address-of (&var)",
+                    None => "plain value",
+                };
+                self.error_messages.push(format!(
+                    "Pointer kind mismatch for argument {} of function call: expected {}, got {}; Line: {}; Char pos: {}",
+                    fc_params_len + 1, expected_str, actual_str,
+                    word.line.unwrap_or(0), word.char_num.unwrap_or(0)
+                ));
+            }
         }
     }
 
@@ -696,9 +738,16 @@ impl SemanticAnalyzer {
 
         let entry = match scope {
             Scope::Root => self.table.get(*idx),
-            Scope::Function | Scope::Parameter => self.table.iter().find_map(|t| {
+            Scope::Function => self.table.iter().find_map(|t| {
                 if let TableTypes::Function(f) = t {
                     f.table.get(*idx)
+                } else {
+                    None
+                }
+            }),
+            Scope::Parameter => self.table.iter().find_map(|t| {
+                if let TableTypes::Function(f) = t {
+                    f.parameters.as_ref().and_then(|p| p.get(*idx))
                 } else {
                     None
                 }

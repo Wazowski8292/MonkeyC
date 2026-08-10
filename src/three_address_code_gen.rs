@@ -416,6 +416,20 @@ impl ThreeAddressCodeGenerator {
         self.memory_alloc += (self.temp_count - last_temp + 1) * 16; //TODO: this should depend on the variable and need to remember that before calling a function that it should be a multiple of 16
     }
  
+    fn extract_call_arg(entry: &TableTypes) -> String {
+        match entry {
+            TableTypes::Reasingment(r) => {
+                let prefix = match &r.ptr {
+                    Some(PointerType::Reference) => "&",
+                    Some(PointerType::Pointer)   => "*",
+                    None => "",
+                };
+                format!("{}{}", prefix, r.name)
+            }
+            _ => Self::extract_operand(entry),
+        }
+    }
+
     fn add_function_call(&mut self, call: FunctionCall) {
         let mut tac = Tac {
             tac_type: Type::Call,
@@ -426,7 +440,7 @@ impl ThreeAddressCodeGenerator {
         };
  
         for parameter in call.parameters.unwrap_or_default() {
-            tac.arguments.push(Self::extract_operand(&parameter));
+            tac.arguments.push(Self::extract_call_arg(&parameter));
         }
  
         self.tac_table.push(tac);
