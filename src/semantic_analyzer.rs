@@ -579,6 +579,7 @@ impl SemanticAnalyzer {
             self.error_messages.push(format!("Undefined symbol: {}; Line: {}; Char pos: {}", word.word, word.line.unwrap_or(0), word.char_num.unwrap_or(0)));
         }
 
+        let rhs_ptr_type = self.ptr_type.clone();
         let mut mismatch: Option<(TokenType, Option<TokenType>)> = None;
         match self.active_table().last_mut() {
             Some(TableTypes::Variable(var)) => {
@@ -591,6 +592,7 @@ impl SemanticAnalyzer {
                                 mismatch = Some((var.token_type, Some(vt)));
                             }
                         }
+                        var.ptr = rhs_ptr_type;
                     }
                 }
             }
@@ -642,9 +644,21 @@ impl SemanticAnalyzer {
         new_entry.add_arguments(word.word.clone());
         
         Self::add_caller_info(new_entry, index, word.word.clone(), &table_snapshot, &mut extra_errors, &word);
+        self.add_pointer_info();
 
         self.error_messages.append(&mut extra_errors);
     }
+
+    fn add_pointer_info(&mut self) {
+        let ptr_type = self.ptr_type.clone();
+        if let Some(TableTypes::Reasingment(last)) = self.active_table().last_mut() {
+            match last.parameters.as_mut().and_then(|v| v.last_mut()) {
+                Some(TableTypes::Reasingment(reasign)) => reasign.ptr = ptr_type,
+                _ => {}
+            }
+        }    
+    }
+
 
     fn check_parameters(&mut self, entry_info: Entry, fc_params_len: usize, fc_target: usize) {
         let token = entry_info.token.clone();

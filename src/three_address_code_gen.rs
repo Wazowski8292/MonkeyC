@@ -226,9 +226,30 @@ impl ThreeAddressCodeGenerator {
                         result: Some(tmp.clone()),
                         value_type: value_type.clone(),
                     });
-
                     tmp
-                } 
+                }
+                Value::Deref(name) => {
+                    let tmp = self.next_temp();
+                    self.tac_table.push(Tac {
+                        tac_type: Type::Deref,
+                        arguments: vec![name],
+                        operator: None,
+                        result: Some(tmp.clone()),
+                        value_type: value_type.clone(),
+                    });
+                    tmp
+                }
+                Value::Ref(name) => {
+                    let tmp = self.next_temp();
+                    self.tac_table.push(Tac {
+                        tac_type: Type::AddressOf,
+                        arguments: vec![name],
+                        operator: None,
+                        result: Some(tmp.clone()),
+                        value_type: value_type.clone(),
+                    });
+                    tmp
+                }
             }
         };
         *pos += 1;
@@ -281,6 +302,30 @@ impl ThreeAddressCodeGenerator {
         }
  
         if tokens.len() == 1 {
+            match &tokens[0] {
+                Value::Deref(name) => {
+                    self.tac_table.push(Tac {
+                        tac_type: Type::Deref,
+                        arguments: vec![name.clone()],
+                        operator: None,
+                        result: Some(target),
+                        value_type,
+                    });
+                    return;
+                }
+                Value::Ref(name) => {
+                    self.tac_table.push(Tac {
+                        tac_type: Type::AddressOf,
+                        arguments: vec![name.clone()],
+                        operator: None,
+                        result: Some(target),
+                        value_type,
+                    });
+                    return;
+                }
+                _ => {}
+            }
+
             let operand = match &tokens[0] {
                 Value::Var(s) => s.clone(),
                 Value::FuncCall(f) => {
@@ -295,8 +340,9 @@ impl ThreeAddressCodeGenerator {
                     });
                     tmp
                 }
+                Value::Deref(_) | Value::Ref(_) => unreachable!(),
             };
-            
+
             self.tac_table.push(Tac {
                 tac_type,
                 arguments: vec![operand],
@@ -391,12 +437,14 @@ impl ThreeAddressCodeGenerator {
         let value_type = Some(reassignment.token_type);
         let tokens: Vec<Value> = reassignment.parameters.unwrap_or_default().iter().map(|e| match e {
             TableTypes::FunctionCall(call) => Value::FuncCall(call.clone()),
+            TableTypes::Reasingment(r) if r.ptr == Some(PointerType::Pointer)   => Value::Deref(r.name.clone()),
+            TableTypes::Reasingment(r) if r.ptr == Some(PointerType::Reference) => Value::Ref(r.name.clone()),
             _ => Value::Var(Self::extract_operand(e)),
         }).collect();
 
         if reassignment.ptr == Some(PointerType::Pointer) {
             let value_arg = tokens.into_iter().next().map(|v| match v {
-                Value::Var(s) => s,
+                Value::Var(s) | Value::Deref(s) | Value::Ref(s) => s,
                 Value::FuncCall(f) => f.name,
             }).unwrap_or_default();
             self.tac_table.push(Tac {
@@ -408,7 +456,7 @@ impl ThreeAddressCodeGenerator {
             });
             return;
         }
- 
+
         self.build_expression_chain(tokens, target_ref, Type::Reasingment, value_type);
         self.tac_table.last_mut().unwrap().result = Some(reassignment.name);
     }

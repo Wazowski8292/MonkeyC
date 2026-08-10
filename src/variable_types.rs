@@ -10,6 +10,8 @@ pub trait Types {
 pub enum Value {
     Var(String),
     FuncCall(FunctionCall),
+    Deref(String),
+    Ref(String),
 }
 
 #[derive(Debug, PartialEq, Clone)]
