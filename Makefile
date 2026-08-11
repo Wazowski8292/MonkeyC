@@ -1,4 +1,4 @@
-FILE ?= Code.MC
+FILE ?= "Code.MC"
 
 run:
 	clear

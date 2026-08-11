@@ -106,6 +106,14 @@ impl CodeGen {
         )
     }
 
+    fn tac_is_pointer(name: &str) -> bool {
+        name.starts_with("*")
+    }
+    
+    fn tac_is_reference(name: &str) -> bool {
+        name.starts_with("&")
+    
+    }
     fn code_gen_bin_op(&mut self, op: &str, a: Slot, b: Slot, t_offset: i32) {
         self.emit(&format!("    mov rax, {}", a.to_asm_op()));
         self.emit(&format!("    {} rax, {}", op, b.to_asm_op()));
@@ -243,25 +251,19 @@ impl CodeGen {
                 if is_f32 {
                     self.emit(&format!("    movss xmm0, dword {}", a_slot.to_asm_op()));
                     self.emit(&format!("    ucomiss xmm0, dword {}", b_slot.to_asm_op()));
-                    self.emit("    sete al");
-                    self.emit("    movzx rax, al");
-                    self.emit(&format!("    mov [rbp - {}], rax", t_offset));
-                    self.emit("");
                 } else if is_f64 {
                     self.emit(&format!("    movsd xmm0, qword {}", a_slot.to_asm_op()));
                     self.emit(&format!("    ucomisd xmm0, qword {}", b_slot.to_asm_op()));
-                    self.emit("    sete al");
-                    self.emit("    movzx rax, al");
-                    self.emit(&format!("    mov [rbp - {}], rax", t_offset));
-                    self.emit("");
                 } else {
                     self.emit(&format!("    mov rax, {}", a_slot.to_asm_op()));
                     self.emit(&format!("    cmp rax, {}", b_slot.to_asm_op()));
-                    self.emit("    sete al");
-                    self.emit("    movzx rax, al");
-                    self.emit(&format!("    mov [rbp - {}], rax", t_offset));
-                    self.emit("");
                 }
+                
+                self.emit("    sete al");
+                self.emit("    movzx rax, al");
+                self.emit(&format!("    mov [rbp - {}], rax", t_offset));
+                self.emit("");
+                
             }
             Some(op) => {
                 let b_slot = self.get_or_alloc_slot(&variable.arguments[1]);

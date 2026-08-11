@@ -549,14 +549,14 @@ impl SemanticAnalyzer {
         };
 
         if !last_finished || self.set_value || self.set_return_value || in_call {
-            self.handle_argument(entry, in_reasignment, in_function_call, in_nested_call, expected_fc_params, fc_params_len, fc_target, fc_scope);
+            self.handle_argument(entry, in_reasignment, in_function_call, in_nested_call, expected_fc_params, fc_params_len, fc_target);
         } else {
             self.handle_new_entry(entry);
         }
     }
 
     fn handle_argument(&mut self, entry_info: Entry, in_reasignment: bool, in_function_call: bool, in_nested_call: bool,
-        expected_fc_params: usize, fc_params_len: usize, fc_target: usize, fc_scope: Scope) {
+        expected_fc_params: usize, fc_params_len: usize, fc_target: usize) {
 
         let token = entry_info.token.clone();
         let word = entry_info.word.clone();
@@ -571,7 +571,7 @@ impl SemanticAnalyzer {
                 self.error_messages.push(format!("Too many arguments for function call. Expected: {}, Found: {}; Line: {}; Char pos: {}", 
                     expected_fc_params, fc_params_len + 1, word.line.unwrap_or(0), word.char_num.unwrap_or(0)));
             } else {
-                self.check_parameters(entry_info, fc_params_len, fc_target, fc_scope);                
+                self.check_parameters(entry_info, fc_params_len, fc_target);                
             }
         }
 
@@ -580,28 +580,36 @@ impl SemanticAnalyzer {
         }
 
         let rhs_ptr_type = self.ptr_type.clone();
-        let mut mismatch: Option<(TokenType, Option<TokenType>)> = None;
+        let mut mismatch: Option<(TokenType, Option<TokenType>, Option<PointerType>)> = None;
         match self.active_table().last_mut() {
-            Some(TableTypes::Variable(var)) => {
-                if !in_nested_call {
-                    let value_type = TokenType::from_str(&word.word.clone()).literal_type();
+            Some(TableTypes::Variable(var)) if !in_nested_call => {
+                
+                let value_type = TokenType::from_str(&word.word.clone()).literal_type();
 
-                    if var.name.is_some() {
-                        if let Some(vt) = value_type {
-                            if vt != var.token_type {
-                                mismatch = Some((var.token_type, Some(vt)));
-                            }
-                        }
-                        var.ptr = rhs_ptr_type;
+                if var.name.is_some() && let Some(vt) = value_type {
+                    let corrrect_ptr_type = match var.ptr {
+                        Some(PointerType::Pointer) => rhs_ptr_type == Some(PointerType::Reference), 
+                        _ => true,
+                    };
+
+                    if vt != var.token_type && !corrrect_ptr_type {
+                        mismatch = Some((var.token_type, Some(vt), rhs_ptr_type.clone()));
                     }
-                }
+                }   
             }
-            Some(TableTypes::Reasingment(reasign)) => {
-                 if reasign.token_type != TokenType::Unknow && !in_nested_call {
+            Some(TableTypes::Reasingment(reasign)) if !in_nested_call => {
+                if reasign.token_type == TokenType::Unknow {
                     let value_type = TokenType::from_str(&word.word.clone()).literal_type();
                     if let Some(vt) = value_type {
-                        if vt != reasign.token_type && !TokenType::is_operator(reasign.token_type) {
-                            mismatch = Some((reasign.token_type, Some(vt)));
+                        let corrrect_ptr_type = match reasign.ptr {
+                            Some(PointerType::Reference) => rhs_ptr_type != Some(PointerType::Pointer),
+                            None => rhs_ptr_type == None,
+                            _ => true,
+                        };
+
+
+                        if vt != reasign.token_type && !TokenType::is_operator(reasign.token_type) && !corrrect_ptr_type {
+                            mismatch = Some((reasign.token_type, Some(vt), rhs_ptr_type));
                         }
                     }
                 }
@@ -613,10 +621,16 @@ impl SemanticAnalyzer {
             _ => {}
         }
 
-        if let Some((expected, found)) = mismatch {
+        if let Some((expected, found, ptr_type)) = mismatch {
+            let ptr_type_str = match ptr_type {
+                Some(PointerType::Pointer) => "*",
+                Some(PointerType::Reference) => "&",
+                _ => "",
+            };
+
             self.error_messages.push(format!(
-                "Type mismatch. Expected: {}, Found: {}, Line: {}, Char pos: {}",
-                expected.to_str(),
+                "Type mismatch. Expected: {}{}, Found: {}, Line: {}, Char pos: {}",
+                ptr_type_str, expected.to_str(),
                 found.unwrap_or(TokenType::Unknow).to_str(),
                 word.line.unwrap_or(0), 
                 word.char_num.unwrap_or(0)));
@@ -666,13 +680,7 @@ impl SemanticAnalyzer {
         }
     }
 
-
-    fn check_parameters(&mut self, entry_info: Entry, fc_params_len: usize, fc_target: usize, fc_scope: Scope) {
-        // Embedded functions have no user-defined parameter table; skip pointer/type checks.
-        if fc_scope == Scope::EnbedFunc {
-            return;
-        }
-
+    fn check_parameters(&mut self, entry_info: Entry, fc_params_len: usize, fc_target: usize) {
         let token = entry_info.token.clone();
         let word = entry_info.word.clone();
         let index = entry_info.index.clone();
@@ -928,13 +936,15 @@ impl SemanticAnalyzer {
     }
 }
 
-pub fn analyze_semantically(stack: Vec<Block>) -> Result<Vec<TableTypes>, usize>{
+pub fn analyze_semantically(stack: Vec<Block>, debug: bool) -> Result<Vec<TableTypes>, usize>{
     let mut semantic_analyzer: SemanticAnalyzer = SemanticAnalyzer::new();
     semantic_analyzer.analyze(stack);
 
-    println!("\n---------------------- \n");
-    println!("Semantic analyzer table: {:#?}", semantic_analyzer.table);
-    println!("\n---------------------- \n");
+    if debug {
+        println!("\n---------------------- \n");
+        println!("Semantic analyzer table: {:#?}", semantic_analyzer.table);
+        println!("\n---------------------- \n");
+    }
     let len = semantic_analyzer.error_messages.len();
     if len > 0 {
         println!("Semantic analyzer erros msg: {:#?}", semantic_analyzer.error_messages);

@@ -33,7 +33,7 @@ pub enum Block {
     Parameter(Vec<Block>),
 }
 
-pub fn parse_text(file_path: &String) -> Result<Vec<Block>, String> {
+pub fn parse_text(file_path: &String, debug: bool) -> Result<Vec<Block>, String> {
     let file = File::open(file_path).expect("Failed to open the file");
     let reader = BufReader::new(file);
 
@@ -125,13 +125,11 @@ pub fn parse_text(file_path: &String) -> Result<Vec<Block>, String> {
     }
 
     let current_collection = stack.pop().unwrap();
-    if !current_collection.is_empty() {
-        //println!("{:#?}", current_collection);
+    if !current_collection.is_empty() && debug {
+        println!("{:#?}", current_collection);
     }
     Ok(current_collection)
 }
-
-
 
 fn add_last_word(current_word: &mut Word, current_line: &mut Vec<Word>) {
     if !current_word.word.is_empty() {
