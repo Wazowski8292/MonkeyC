@@ -315,10 +315,13 @@ impl SemanticAnalyzer {
     } 
 
     fn resolve(&mut self, name: String) -> Option<(usize, Scope, bool)> {
-        if let Some(result) = Self::resolve_in_chain( &name, &mut self.table, 0, self.max_nesting, self.defining_parameters) {
+        let lookup_name = crate::variable_types::parse_array_syntax(&name)
+            .map(|(arr_name, _)| arr_name)
+            .unwrap_or(name);
+        if let Some(result) = Self::resolve_in_chain(&lookup_name, &mut self.table, 0, self.max_nesting, self.defining_parameters) {
             return Some(result);
         } else {
-            return self.resolve_in_parameters(&name);
+            return self.resolve_in_parameters(&lookup_name);
         }
     }
 
@@ -907,13 +910,20 @@ impl SemanticAnalyzer {
                     Some(TableTypes::Variable(v)) => v.token_type,
                     _ => TokenType::Unknow,
                 };
+
+                let (name, array_index) = match crate::variable_types::parse_array_syntax(&word.word) {
+                    Some((arr_name, idx_str)) => (arr_name, Some(idx_str)),
+                    None => (word.word, None),
+                };
+
                 let reasign = Reasingment {
                     target: idx,
                     target_scope: scope,
                     parameters: None,
-                    name: word.word,
+                    name,
                     token_type,
                     ptr: self.ptr_type.clone(),
+                    array_index,
                 };
                 self.active_table().push(TableTypes::Reasingment(reasign));
             }
@@ -941,8 +951,35 @@ impl SemanticAnalyzer {
     }
 
     fn tokenize_line(&mut self, line: &Vec<Word>) {
-        for word in line {
-            self.tokenize_word(word.clone());
+        let mut normalized_words: Vec<Word> = Vec::new();
+        let mut i = 0;
+        while i < line.len() {
+            let mut w = line[i].clone();
+            if w.word.len() > 1 && w.word.ends_with(',') && !w.word.starts_with('"') {
+                w.word.pop();
+            }
+            if w.word == "," || w.word == "{" || w.word == "}" {
+                i += 1;
+                continue;
+            }
+
+            if i + 3 < line.len() && line[i+1].word == "[" && line[i+3].word == "]" {
+                w.word = format!("{}[{}]", w.word, line[i+2].word);
+                i += 4;
+            } else if i + 1 < line.len() && line[i+1].word.starts_with('[') && line[i+1].word.ends_with(']') {
+                w.word = format!("{}{}", w.word, line[i+1].word);
+                i += 2;
+            } else {
+                i += 1;
+            }
+
+            if !w.word.is_empty() {
+                normalized_words.push(w);
+            }
+        }
+
+        for word in normalized_words {
+            self.tokenize_word(word);
         }
     }
 }

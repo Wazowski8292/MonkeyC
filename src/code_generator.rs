@@ -56,6 +56,9 @@ impl CodeGen {
         for (_, tac) in tac_table.iter().enumerate() {
             match tac.tac_type {
                 Type::Variable | Type::Reasingment => self.add_variable(tac),
+                Type::ArrayDecl => self.add_array_decl(tac),
+                Type::ArrayIndex => self.add_array_index(tac),
+                Type::ArrayAssign => self.add_array_assign(tac),
                 Type::AddressOf => self.add_address_of(tac),
                 Type::Deref => self.add_deref(tac),
                 Type::DerefAssign => self.add_deref_assign(tac),
@@ -536,6 +539,66 @@ impl CodeGen {
             self.emit("    mov [rax], rbx");
             self.emit("");
         }
+    }
+
+    fn add_array_decl(&mut self, tac: &Tac) {
+        let name = tac.result.as_deref().unwrap_or("");
+        let size = tac.arguments.get(0).and_then(|s| s.parse::<i32>().ok()).unwrap_or(1);
+        self.offset -= size * 8;
+        self.slot_map.insert(name.to_string(), (self.offset, tac.value_type.unwrap_or(TokenType::Int), false));
+    }
+
+    fn add_array_index(&mut self, tac: &Tac) {
+        let dst_name = tac.result.as_deref().unwrap_or("");
+        let array_name = tac.arguments.get(0).map(String::as_str).unwrap_or("");
+        let index_arg = tac.arguments.get(1).map(String::as_str).unwrap_or("0");
+
+        let base_offset = match self.get_or_alloc_slot(array_name) {
+            Slot::Mem(off) => off,
+            _ => panic!("array base must be a memory slot"),
+        };
+        let dst_offset = match self.get_or_alloc_slot(dst_name) {
+            Slot::Mem(off) => off,
+            _ => panic!("array index destination must be a memory slot"),
+        };
+
+        self.emit(&format!("    lea rax, [rbp - {}]", base_offset));
+        if index_arg.parse::<i64>().is_ok() {
+            self.emit(&format!("    mov rbx, {}", index_arg));
+        } else {
+            let idx_slot = self.get_or_alloc_slot(index_arg);
+            self.emit(&format!("    mov rbx, {}", idx_slot.to_asm_op()));
+        }
+        self.emit("    imul rbx, 8");
+        self.emit("    add rax, rbx");
+        self.emit("    mov rcx, [rax]");
+        self.emit(&format!("    mov [rbp - {}], rcx", dst_offset));
+        self.emit("");
+    }
+
+    fn add_array_assign(&mut self, tac: &Tac) {
+        let array_name = tac.result.as_deref().unwrap_or("");
+        let index_arg = tac.arguments.get(0).map(String::as_str).unwrap_or("0");
+        let val_arg = tac.arguments.get(1).map(String::as_str).unwrap_or("0");
+
+        let base_offset = match self.get_or_alloc_slot(array_name) {
+            Slot::Mem(off) => off,
+            _ => panic!("array base must be a memory slot"),
+        };
+        let val_slot = self.get_or_alloc_slot(val_arg);
+
+        self.emit(&format!("    lea rax, [rbp - {}]", base_offset));
+        if index_arg.parse::<i64>().is_ok() {
+            self.emit(&format!("    mov rbx, {}", index_arg));
+        } else {
+            let idx_slot = self.get_or_alloc_slot(index_arg);
+            self.emit(&format!("    mov rbx, {}", idx_slot.to_asm_op()));
+        }
+        self.emit("    imul rbx, 8");
+        self.emit("    add rax, rbx");
+        self.emit(&format!("    mov rcx, {}", val_slot.to_asm_op()));
+        self.emit("    mov [rax], rcx");
+        self.emit("");
     }
 
     fn add_get_return(&mut self, get_return: &Tac) {

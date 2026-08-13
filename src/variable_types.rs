@@ -12,6 +12,7 @@ pub enum Value {
     FuncCall(FunctionCall),
     Deref(String),
     Ref(String),
+    Index(String, String),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -26,6 +27,8 @@ pub struct Variable {
     pub value: Option<Vec<Value>>,
     pub name: Option<String>,
     pub ptr: Option<PointerType>,
+    pub is_array: bool,
+    pub array_size: Option<usize>,
 }
 
 impl Variable {
@@ -44,6 +47,19 @@ impl Variable {
     }
 }
 
+pub fn parse_array_syntax(s: &str) -> Option<(String, String)> {
+    if let (Some(open), Some(close)) = (s.find('['), s.rfind(']')) {
+        if open < close {
+            let name = s[..open].trim().to_string();
+            let index = s[open + 1..close].trim().to_string();
+            if !name.is_empty() && !index.is_empty() {
+                return Some((name, index));
+            }
+        }
+    }
+    None
+}
+
 impl Types for Variable {
     fn new(token: TokenType) -> Self {
         Self {
@@ -51,18 +67,35 @@ impl Types for Variable {
             value: None,
             name: None,
             ptr: None,
+            is_array: false,
+            array_size: None,
         }
     }
 
     fn finished_definition(&self) -> bool {
+        if self.is_array {
+            if let Some(size) = self.array_size {
+                return self.value.as_ref().map_or(false, |v| v.len() >= size);
+            }
+        }
         self.name.is_some()
     }
 
     fn add_arguments(&mut self, argument: String) {
-        if self.name == None {
-            self.name = Some(argument);
+        if self.name.is_none() {
+            if let Some((arr_name, size_str)) = parse_array_syntax(&argument) {
+                self.name = Some(arr_name);
+                self.is_array = true;
+                self.array_size = size_str.parse::<usize>().ok();
+            } else {
+                self.name = Some(argument);
+            }
         } else {
-            self.value.get_or_insert_with(Vec::new).push(Value::Var(argument));
+            if let Some((arr_name, idx_str)) = parse_array_syntax(&argument) {
+                self.value.get_or_insert_with(Vec::new).push(Value::Index(arr_name, idx_str));
+            } else {
+                self.value.get_or_insert_with(Vec::new).push(Value::Var(argument));
+            }
         }
     }
 }
@@ -109,6 +142,7 @@ pub struct Reasingment {
     pub name: String,
     pub token_type: TokenType,
     pub ptr: Option<PointerType>,
+    pub array_index: Option<String>,
 }
 
 impl Reasingment {
@@ -136,6 +170,7 @@ impl Types for Reasingment {
             name: String::new(),
             token_type: TokenType::Unknow,
             ptr: None,
+            array_index: None,
         }
     }
 

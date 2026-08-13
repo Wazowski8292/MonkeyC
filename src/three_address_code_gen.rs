@@ -104,6 +104,9 @@ pub enum Type {
     Function,
     Param,
     Variable,
+    ArrayDecl,
+    ArrayIndex,
+    ArrayAssign,
     AddressOf,
     Deref,
     DerefAssign,
@@ -250,6 +253,18 @@ impl ThreeAddressCodeGenerator {
                 });
                 (tmp, true)
             }
+            Value::Index(array_name, index_expr) => {
+                let tmp = self.next_temp();
+                self.tac_table.push(Tac {
+                    tac_type: Type::ArrayIndex,
+                    arguments: vec![array_name.clone(), index_expr.clone()],
+                    operator: None,
+                    result: Some(tmp.clone()),
+                    value_type,
+                    is_ptr: false,
+                });
+                (tmp, false)
+            }
         }
     }
 
@@ -392,12 +407,41 @@ impl ThreeAddressCodeGenerator {
         if variable.name == Some("_".to_string()) {
             name = self.next_temp();
         } else {
-            name = variable.name.unwrap_or_default();
+            name = variable.name.clone().unwrap_or_default();
         }
 
         let value_type = Some(variable.token_type);
-        let tokens = variable.value.unwrap_or_default();
 
+        if variable.is_array {
+            let size = variable.array_size.unwrap_or(1);
+            self.tac_table.push(Tac {
+                tac_type: Type::ArrayDecl,
+                arguments: vec![size.to_string()],
+                operator: None,
+                result: Some(name.clone()),
+                value_type: value_type.clone(),
+                is_ptr: false,
+            });
+
+            self.memory_alloc += size * 16;
+
+            if let Some(tokens) = variable.value {
+                for (idx, token) in tokens.iter().enumerate() {
+                    let (val_str, _) = self.evaluate_value(token, value_type.clone());
+                    self.tac_table.push(Tac {
+                        tac_type: Type::ArrayAssign,
+                        arguments: vec![idx.to_string(), val_str],
+                        operator: None,
+                        result: Some(name.clone()),
+                        value_type: value_type.clone(),
+                        is_ptr: false,
+                    });
+                }
+            }
+            return;
+        }
+
+        let tokens = variable.value.unwrap_or_default();
         let tac_type = Type::Variable;
 
         self.build_expression_chain(tokens, name, tac_type, value_type);
@@ -439,6 +483,35 @@ impl ThreeAddressCodeGenerator {
     fn add_reasingment(&mut self, reassignment: Reasingment) {
         let target_ref = Self::symbol_ref(reassignment.target, &reassignment.target_scope);
         let value_type = Some(reassignment.token_type);
+
+        if let Some(array_idx) = reassignment.array_index {
+            let tokens: Vec<Value> = reassignment.parameters.unwrap_or_default().iter().map(|e| match e {
+                TableTypes::FunctionCall(call) => Value::FuncCall(call.clone()),
+                TableTypes::Reasingment(r) if r.ptr == Some(PointerType::Pointer)   => Value::Deref(r.name.clone()),
+                TableTypes::Reasingment(r) if r.ptr == Some(PointerType::Reference) => Value::Ref(r.name.clone()),
+                _ => Value::Var(Self::extract_operand(e)),
+            }).collect();
+
+            let rhs_val = if tokens.len() == 1 {
+                let (val, _) = self.evaluate_value(&tokens[0], value_type.clone());
+                val
+            } else {
+                let tmp = self.next_temp();
+                self.build_expression_chain(tokens, tmp.clone(), Type::Variable, value_type.clone());
+                tmp
+            };
+
+            self.tac_table.push(Tac {
+                tac_type: Type::ArrayAssign,
+                arguments: vec![array_idx, rhs_val],
+                operator: None,
+                result: Some(reassignment.name),
+                value_type,
+                is_ptr: false,
+            });
+            return;
+        }
+
         let tokens: Vec<Value> = reassignment.parameters.unwrap_or_default().iter().map(|e| match e {
             TableTypes::FunctionCall(call) => Value::FuncCall(call.clone()),
             TableTypes::Reasingment(r) if r.ptr == Some(PointerType::Pointer)   => Value::Deref(r.name.clone()),
@@ -463,7 +536,7 @@ impl ThreeAddressCodeGenerator {
                         });
                         tmp
                     }
-                    Value::Deref(_) | Value::Ref(_) => {
+                    Value::Deref(_) | Value::Ref(_) | Value::Index(_, _) => {
                         let tmp = self.next_temp();
                         self.build_expression_chain(tokens, tmp.clone(), Type::Variable, value_type.clone());
                         tmp
@@ -664,6 +737,23 @@ impl ThreeAddressCodeGenerator {
                 let ptr = tac.arguments.get(0).map(String::as_str).unwrap_or("?");
                 let val = tac.arguments.get(1).map(String::as_str).unwrap_or("?");
                 format!("{pad}*{ptr} = {val}")
+            }
+            Type::ArrayDecl => {
+                let result = tac.result.as_deref().unwrap_or("?");
+                let size = tac.arguments.get(0).map(String::as_str).unwrap_or("?");
+                format!("{pad}array {result}[{size}]")
+            }
+            Type::ArrayIndex => {
+                let result = tac.result.as_deref().unwrap_or("?");
+                let arr = tac.arguments.get(0).map(String::as_str).unwrap_or("?");
+                let idx = tac.arguments.get(1).map(String::as_str).unwrap_or("?");
+                format!("{pad}{result} = {arr}[{idx}]")
+            }
+            Type::ArrayAssign => {
+                let arr = tac.result.as_deref().unwrap_or("?");
+                let idx = tac.arguments.get(0).map(String::as_str).unwrap_or("?");
+                let val = tac.arguments.get(1).map(String::as_str).unwrap_or("?");
+                format!("{pad}{arr}[{idx}] = {val}")
             }
             Type::Label => {
                 let label = tac.arguments.get(0).map(String::as_str).unwrap_or("?");

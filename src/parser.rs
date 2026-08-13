@@ -147,16 +147,12 @@ fn add_last_line(current_line: &mut Vec<Word>, current_multiple_items: &mut Vec<
 }
 
 fn add_last_block(first_char: &mut bool, current_word: &mut Word, current_line: &mut Vec<Word>, 
-    current_multiple_items: &mut Vec<Vec<Word>>, stack: &mut Vec<Vec<Block>>, line: usize, chars: usize, new_line: bool) -> Result<(), String>{
+    current_multiple_items: &mut Vec<Vec<Word>>, stack: &mut Vec<Vec<Block>>, _line: usize, _chars: usize, _new_line: bool) -> Result<(), String>{
         
     if !current_word.word.is_empty() {
-        if new_line {
-            current_line.push(current_word.clone());
-            current_word.clear();
-            *first_char = false;
-        } else {
-            return Err(format!("You haven't finished the line. Line: {}; Char: {}", line, chars));
-        }
+        current_line.push(current_word.clone());
+        current_word.clear();
+        *first_char = false;
     }
     
     add_last_line(current_line, current_multiple_items, first_char);
