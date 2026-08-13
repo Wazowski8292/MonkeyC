@@ -666,6 +666,17 @@ impl SemanticAnalyzer {
     fn add_pointer_info(&mut self) {
         let ptr_type = self.ptr_type.clone();
         match self.active_table().last_mut() {
+            Some(TableTypes::Variable(var)) => {
+                if let Some(val) = var.value.as_mut().and_then(|v| v.last_mut()) {
+                    if let Value::Var(name) = val {
+                        *val = match ptr_type {
+                            Some(PointerType::Reference) => Value::Ref(name.clone()),
+                            Some(PointerType::Pointer) => Value::Deref(name.clone()),
+                            None => Value::Var(name.clone()),
+                        };
+                    }
+                }
+            }
             Some(TableTypes::Reasingment(last)) => {
                 if let Some(TableTypes::Reasingment(reasign)) = last.parameters.as_mut().and_then(|v| v.last_mut()) {
                     reasign.ptr = ptr_type;

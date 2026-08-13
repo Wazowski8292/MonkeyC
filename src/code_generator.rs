@@ -26,10 +26,11 @@ impl Slot {
 struct CodeGen {
     file: Vec<String>,
     rodata: Vec<String>,
-    slot_map: HashMap<String, (i32, TokenType)>,
+    slot_map: HashMap<String, (i32, TokenType, bool)>,
     offset: i32,
     current_fn: String,
     enbeded_funcs: Vec<String>,
+    added_embedded_names: Vec<String>,
     fp_const_count: usize,
     param_int_idx: usize,
     param_fp_idx: usize,
@@ -44,6 +45,7 @@ impl CodeGen {
             offset: 0,
             current_fn: String::new(),
             enbeded_funcs: vec![],
+            added_embedded_names: vec![],
             fp_const_count: 0,
             param_int_idx: 0,
             param_fp_idx: 0,
@@ -58,6 +60,13 @@ impl CodeGen {
                 Type::Deref => self.add_deref(tac),
                 Type::DerefAssign => self.add_deref_assign(tac),
                 Type::Function => {
+                    if !self.current_fn.is_empty() {
+                        if self.current_fn == "main" {
+                            self.add_exit_syscall();
+                        } else {
+                            self.add_epilogue();
+                        }
+                    }
                     self.slot_map.clear();
                     self.offset = 0;
                     self.param_int_idx = 0;
@@ -112,7 +121,25 @@ impl CodeGen {
     
     fn tac_is_reference(name: &str) -> bool {
         name.starts_with("&")
-    
+    }
+
+    fn get_slot_info(&self, name: &str) -> (TokenType, bool) {
+        self.slot_map
+            .get(name)
+            .map(|(_, tok, is_ptr)| (*tok, *is_ptr))
+            .unwrap_or_else(|| (TokenType::from_str(name), false))
+    }
+
+    fn is_float_operand(&self, name: &str, tac: Option<&Tac>) -> bool {
+        let (tok, is_ptr) = self.get_slot_info(name);
+        let from_tac = tac.map(Self::tac_is_float).unwrap_or(false);
+        (from_tac || matches!(tok, TokenType::Float | TokenType::FloatLiteral)) && !is_ptr
+    }
+
+    fn is_double_operand(&self, name: &str, tac: Option<&Tac>) -> bool {
+        let (tok, is_ptr) = self.get_slot_info(name);
+        let from_tac = tac.map(Self::tac_is_double).unwrap_or(false);
+        (from_tac || matches!(tok, TokenType::Double | TokenType::DoubleLiteral)) && !is_ptr
     }
     fn code_gen_bin_op(&mut self, op: &str, a: Slot, b: Slot, t_offset: i32) {
         self.emit(&format!("    mov rax, {}", a.to_asm_op()));
@@ -203,11 +230,11 @@ impl CodeGen {
             return Slot::Const(name.to_string());
         }
 
-        if let Some(&existing) = self.slot_map.get(name) {
-            return Slot::Mem(-existing.0);
+        if let Some(&(existing, _, _ptr)) = self.slot_map.get(name) {
+            return Slot::Mem(-existing);
         }
         self.offset -= 8;
-        self.slot_map.insert(name.to_string(), (self.offset, token));
+        self.slot_map.insert(name.to_string(), (self.offset, token, false));
         Slot::Mem(-self.offset)
     }
 
@@ -220,13 +247,15 @@ impl CodeGen {
         };
 
         let a_arg = &variable.arguments[0];
-        let a_tok = self.slot_map.get(a_arg).map(|(_, t)| *t).unwrap_or_else(|| TokenType::from_str(a_arg));
-        let is_f32 = Self::tac_is_float(variable) || matches!(a_tok, TokenType::Float | TokenType::FloatLiteral);
-        let is_f64 = Self::tac_is_double(variable) || matches!(a_tok, TokenType::Double | TokenType::DoubleLiteral);
+        let (a_tok, a_ptr) = self.get_slot_info(a_arg);
+        
+        let is_ptr = variable.is_ptr || a_ptr || self.get_slot_info(&name).1;
+        let is_f32 = self.is_float_operand(a_arg, Some(variable));
+        let is_f64 = self.is_double_operand(a_arg, Some(variable));
 
         let a_slot = self.get_or_alloc_slot(&variable.arguments[0]);
 
-        self.slot_map.insert(name.to_string(), (-t_offset, a_tok));
+        self.slot_map.insert(name.to_string(), (-t_offset, a_tok, is_ptr));
 
         match &variable.operator {
             None => {
@@ -307,13 +336,14 @@ impl CodeGen {
     fn add_param(&mut self, param: &Tac) {
         let param_name = param.arguments.get(0).map(String::as_str).unwrap_or("?");
         let param_type = param.value_type.unwrap_or(TokenType::Int);
+        let is_ptr = param.is_ptr;
 
         self.offset -= 8;
         let offset = self.offset;
-        self.slot_map.insert(param_name.to_string(), (offset, param_type));
+        self.slot_map.insert(param_name.to_string(), (offset, param_type, is_ptr));
 
-        let is_f32 = matches!(param_type, TokenType::Float);
-        let is_f64 = matches!(param_type, TokenType::Double);
+        let is_f32 = matches!(param_type, TokenType::Float) && !is_ptr;
+        let is_f64 = matches!(param_type, TokenType::Double) && !is_ptr;
 
         if is_f32 {
             if self.param_fp_idx < FP_ARG_REGS.len() {
@@ -350,11 +380,32 @@ impl CodeGen {
         let mut fp_i = 0;
 
         for arg_name in arg_names.iter() {
-            let slot = self.get_or_alloc_slot(arg_name);
+            if Self::tac_is_pointer(arg_name) {
+                let real_name = &arg_name[1..];
+                let slot = self.get_or_alloc_slot(real_name);
+                self.emit(&format!("    mov rax, {}", slot.to_asm_op()));
+                self.emit("    mov rax, [rax]");
+                if int_i < ARG_REGS.len() {
+                    self.emit(&format!("    mov {}, rax", ARG_REGS[int_i]));
+                    int_i += 1;
+                }
+                continue;
+            } else if Self::tac_is_reference(arg_name) {
+                let real_name = &arg_name[1..];
+                let slot = self.get_or_alloc_slot(real_name);
+                if let Slot::Mem(off) = slot {
+                    self.emit(&format!("    lea rax, [rbp - {}]", off));
+                    if int_i < ARG_REGS.len() {
+                        self.emit(&format!("    mov {}, rax", ARG_REGS[int_i]));
+                        int_i += 1;
+                    }
+                }
+                continue;
+            }
 
-            let tok = self.slot_map.get(arg_name).map(|(_, t)| *t).unwrap_or_else(|| TokenType::from_str(arg_name));
-            let is_f32 = matches!(tok, TokenType::Float | TokenType::FloatLiteral);
-            let is_f64 = matches!(tok, TokenType::Double | TokenType::DoubleLiteral);
+            let slot = self.get_or_alloc_slot(arg_name);
+            let is_f32 = self.is_float_operand(arg_name, None);
+            let is_f64 = self.is_double_operand(arg_name, None);
 
             if is_f32 {
                 if fp_i < FP_ARG_REGS.len() {
@@ -381,8 +432,12 @@ impl CodeGen {
     }
 
     fn add_enbeded_func(&mut self, name: String) {
+        if self.added_embedded_names.contains(&name) {
+            return;
+        }
         for func in FUNCTIONS.iter() {
-            if func.name == name && !self.enbeded_funcs.contains(&name) {
+            if func.name == name {
+                self.added_embedded_names.push(name.clone());
                 let mut current_line: String = Default::default();
                 let mut counter = 0;
 
@@ -462,10 +517,25 @@ impl CodeGen {
         };
         let val_slot = self.get_or_alloc_slot(val_name);
 
-        self.emit(&format!("    mov rax, [rbp - {}]", ptr_offset));
-        self.emit(&format!("    mov rbx, {}", val_slot.to_asm_op()));
-        self.emit("    mov [rax], rbx");
-        self.emit("");
+        let is_f32 = self.is_float_operand(val_name, Some(tac));
+        let is_f64 = self.is_double_operand(val_name, Some(tac));
+
+        if is_f32 {
+            self.emit(&format!("    movss xmm0, dword {}", val_slot.to_asm_op()));
+            self.emit(&format!("    mov rax, [rbp - {}]", ptr_offset));
+            self.emit("    movss dword [rax], xmm0");
+            self.emit("");
+        } else if is_f64 {
+            self.emit(&format!("    movsd xmm0, qword {}", val_slot.to_asm_op()));
+            self.emit(&format!("    mov rax, [rbp - {}]", ptr_offset));
+            self.emit("    movsd qword [rax], xmm0");
+            self.emit("");
+        } else {
+            self.emit(&format!("    mov rax, [rbp - {}]", ptr_offset));
+            self.emit(&format!("    mov rbx, {}", val_slot.to_asm_op()));
+            self.emit("    mov [rax], rbx");
+            self.emit("");
+        }
     }
 
     fn add_get_return(&mut self, get_return: &Tac) {
@@ -494,6 +564,7 @@ impl CodeGen {
                 operator: tac.operator.clone(),
                 result: tac.result.clone(),
                 value_type: tac.value_type.clone(),
+                is_ptr: tac.is_ptr,
             });
 
             let slot = self.get_or_alloc_slot(value);
@@ -528,11 +599,8 @@ impl CodeGen {
                 let a_slot = self.get_or_alloc_slot(left);
                 let b_slot = self.get_or_alloc_slot(right);
 
-                let a_tok = self.slot_map.get(left).map(|(_, t)| *t).unwrap_or_else(|| TokenType::from_str(left));
-                let b_tok = self.slot_map.get(right).map(|(_, t)| *t).unwrap_or_else(|| TokenType::from_str(right));
-
-                let is_f32 = matches!(a_tok, TokenType::Float | TokenType::FloatLiteral) || matches!(b_tok, TokenType::Float | TokenType::FloatLiteral);
-                let is_f64 = matches!(a_tok, TokenType::Double | TokenType::DoubleLiteral) || matches!(b_tok, TokenType::Double | TokenType::DoubleLiteral);
+                let is_f32 = self.is_float_operand(left, Some(tac)) || self.is_float_operand(right, Some(tac));
+                let is_f64 = self.is_double_operand(left, Some(tac)) || self.is_double_operand(right, Some(tac));
 
                 if is_f32 {
                     self.emit(&format!("    movss xmm0, dword {}", a_slot.to_asm_op()));
@@ -553,9 +621,8 @@ impl CodeGen {
             }
             (_, [value]) => {
                 let slot = self.get_or_alloc_slot(value);
-                let tok = self.slot_map.get(value).map(|(_, t)| *t).unwrap_or_else(|| TokenType::from_str(value));
-                let is_f32 = matches!(tok, TokenType::Float | TokenType::FloatLiteral);
-                let is_f64 = matches!(tok, TokenType::Double | TokenType::DoubleLiteral);
+                let is_f32 = self.is_float_operand(value, Some(tac));
+                let is_f64 = self.is_double_operand(value, Some(tac));
 
                 if is_f32 {
                     self.emit(&format!("    movss xmm0, dword {}", slot.to_asm_op()));
