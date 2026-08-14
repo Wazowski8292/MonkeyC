@@ -12,9 +12,10 @@
 2. [Token types](#token-types)
 3. [Todo](#todo)
 4. [Long term goals](#long-term-goals)
-5. [AI](#AI)
-6. [License](#license)
-7. [Contributing](#contributing)
+5. [Example](#example)
+6. [AI](#AI)
+7. [License](#license)
+8. [Contributing](#contributing)
 
 ---
 
@@ -100,6 +101,20 @@
 
 - [ ] Add a simple standar library
 
+
+## Example 
+
+```c
+fn main() {
+    char text[5] = {'h', 'e', 'l', 'l', 'o'};
+
+    int count = 0;
+    while (count < 5) {
+        print_char(text[count]);
+        count++;
+    }
+}
+```
 
 ## AI
 

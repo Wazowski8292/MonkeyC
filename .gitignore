@@ -1,6 +1,9 @@
 target/
 Code.MC
 Code.o
+code.o
 Code.asm
+code.asm
 Code
+code
 .vscode
