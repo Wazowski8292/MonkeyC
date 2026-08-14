@@ -144,6 +144,7 @@ impl CodeGen {
         let from_tac = tac.map(Self::tac_is_double).unwrap_or(false);
         (from_tac || matches!(tok, TokenType::Double | TokenType::DoubleLiteral)) && !is_ptr
     }
+
     fn code_gen_bin_op(&mut self, op: &str, a: Slot, b: Slot, t_offset: i32) {
         self.emit(&format!("    mov rax, {}", a.to_asm_op()));
         self.emit(&format!("    {} rax, {}", op, b.to_asm_op()));

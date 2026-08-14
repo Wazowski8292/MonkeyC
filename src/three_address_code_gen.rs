@@ -463,6 +463,35 @@ impl ThreeAddressCodeGenerator {
         }
     }
 
+    fn table_type_to_value(e: &TableTypes) -> Value {
+        match e {
+            TableTypes::FunctionCall(call) => Value::FuncCall(call.clone()),
+            TableTypes::Reasingment(r) if r.ptr == Some(PointerType::Pointer)   => Value::Deref(r.name.clone()),
+            TableTypes::Reasingment(r) if r.ptr == Some(PointerType::Reference) => Value::Ref(r.name.clone()),
+            TableTypes::Variable(v) => {
+                if let Some(val) = v.value.as_ref().and_then(|v| v.first()) {
+                    val.clone()
+                } else if let Some(name) = &v.name {
+                    if let Some((arr_name, idx_str)) = crate::variable_types::parse_array_syntax(name) {
+                        Value::Index(arr_name, idx_str)
+                    } else {
+                        Value::Var(name.clone())
+                    }
+                } else {
+                    Value::Var(String::new())
+                }
+            }
+            _ => {
+                let op = Self::extract_operand(e);
+                if let Some((arr_name, idx_str)) = crate::variable_types::parse_array_syntax(&op) {
+                    Value::Index(arr_name, idx_str)
+                } else {
+                    Value::Var(op)
+                }
+            }
+        }
+    }
+
     fn add_function_call(&mut self, call: FunctionCall) {
         let mut tac = Tac {
             tac_type: Type::Call,
@@ -474,7 +503,30 @@ impl ThreeAddressCodeGenerator {
         };
  
         for parameter in call.parameters.unwrap_or_default() {
-            tac.arguments.push(Self::extract_call_arg(&parameter));
+            if let TableTypes::Reasingment(ref r) = parameter {
+                if r.ptr == Some(PointerType::Pointer) || r.ptr == Some(PointerType::Reference) {
+                    tac.arguments.push(Self::extract_call_arg(&parameter));
+                    continue;
+                }
+            }
+            let val = Self::table_type_to_value(&parameter);
+            match val {
+                Value::Index(arr_name, idx_str) => {
+                    let tmp = self.next_temp();
+                    self.tac_table.push(Tac {
+                        tac_type: Type::ArrayIndex,
+                        arguments: vec![arr_name, idx_str],
+                        operator: None,
+                        result: Some(tmp.clone()),
+                        value_type: None,
+                        is_ptr: false,
+                    });
+                    tac.arguments.push(tmp);
+                }
+                _ => {
+                    tac.arguments.push(Self::extract_call_arg(&parameter));
+                }
+            }
         }
  
         self.tac_table.push(tac);
@@ -485,12 +537,7 @@ impl ThreeAddressCodeGenerator {
         let value_type = Some(reassignment.token_type);
 
         if let Some(array_idx) = reassignment.array_index {
-            let tokens: Vec<Value> = reassignment.parameters.unwrap_or_default().iter().map(|e| match e {
-                TableTypes::FunctionCall(call) => Value::FuncCall(call.clone()),
-                TableTypes::Reasingment(r) if r.ptr == Some(PointerType::Pointer)   => Value::Deref(r.name.clone()),
-                TableTypes::Reasingment(r) if r.ptr == Some(PointerType::Reference) => Value::Ref(r.name.clone()),
-                _ => Value::Var(Self::extract_operand(e)),
-            }).collect();
+            let tokens: Vec<Value> = reassignment.parameters.unwrap_or_default().iter().map(|e| Self::table_type_to_value(e)).collect();
 
             let rhs_val = if tokens.len() == 1 {
                 let (val, _) = self.evaluate_value(&tokens[0], value_type.clone());
@@ -512,12 +559,7 @@ impl ThreeAddressCodeGenerator {
             return;
         }
 
-        let tokens: Vec<Value> = reassignment.parameters.unwrap_or_default().iter().map(|e| match e {
-            TableTypes::FunctionCall(call) => Value::FuncCall(call.clone()),
-            TableTypes::Reasingment(r) if r.ptr == Some(PointerType::Pointer)   => Value::Deref(r.name.clone()),
-            TableTypes::Reasingment(r) if r.ptr == Some(PointerType::Reference) => Value::Ref(r.name.clone()),
-            _ => Value::Var(Self::extract_operand(e)),
-        }).collect();
+        let tokens: Vec<Value> = reassignment.parameters.unwrap_or_default().iter().map(|e| Self::table_type_to_value(e)).collect();
 
         if reassignment.ptr == Some(PointerType::Pointer) {
             if tokens.len() == 1 {
@@ -770,7 +812,7 @@ pub fn generate_three_address_code(type_table: Vec<TableTypes>, debug: bool) -> 
     let mut generator = ThreeAddressCodeGenerator::new();
     generator.generate(type_table);
     
-    if debug || true { 
+    if debug { 
         generator._print(); 
     }
     
