@@ -26,8 +26,15 @@ pub enum TokenType {
     Multiplication,
     Division,
     Equals,
+    PlusEquals,
+    MinusEquals,
+    PlusPlus,
+    MinusMinus,
 
     LogicalEquals,
+    NotEquals,
+    GreaterThan,
+    LessThan,
     LogicalAnd,
     LogicalOr,
     Not,
@@ -71,8 +78,15 @@ impl TokenType {
             "*" => TokenType::Multiplication,
             "/" => TokenType::Division,
             "=" => TokenType::Equals,
+            "+=" => TokenType::PlusEquals,
+            "-=" => TokenType::MinusEquals,
+            "++" => TokenType::PlusPlus,
+            "--" => TokenType::MinusMinus,
 
             "==" => TokenType::LogicalEquals,
+            "!=" => TokenType::NotEquals,
+            ">" => TokenType::GreaterThan,
+            "<" => TokenType::LessThan,
             "&&" => TokenType::LogicalAnd,
             "||" => TokenType::LogicalOr,
             "!" => TokenType::Not,
@@ -117,8 +131,15 @@ impl TokenType {
             TokenType::Multiplication => "*".to_string(),
             TokenType::Division => "/".to_string(),
             TokenType::Equals => "=".to_string(),
+            TokenType::PlusEquals => "+=".to_string(),
+            TokenType::MinusEquals => "-=".to_string(),
+            TokenType::PlusPlus => "++".to_string(),
+            TokenType::MinusMinus => "--".to_string(),
 
             TokenType::LogicalEquals => "==".to_string(),
+            TokenType::NotEquals => "!=".to_string(),
+            TokenType::GreaterThan => ">".to_string(),
+            TokenType::LessThan => "<".to_string(),
             TokenType::LogicalAnd => "&&".to_string(),
             TokenType::LogicalOr => "||".to_string(),
             TokenType::Not => "!".to_string(),
@@ -156,11 +177,11 @@ impl TokenType {
     }
 
     pub fn is_logical_operator(token: TokenType) -> bool {
-        token == TokenType::LogicalEquals || token == TokenType::LogicalAnd || token == TokenType::LogicalOr || token == TokenType::Not
+        token == TokenType::LogicalEquals || token == TokenType::NotEquals || token == TokenType::GreaterThan || token == TokenType::LessThan || token == TokenType::LogicalAnd || token == TokenType::LogicalOr || token == TokenType::Not
     }
     
     pub fn is_aritmetic_operator(token: TokenType) -> bool {
-        token == TokenType::Plus || token == TokenType::Minus || token == TokenType::Multiplication || token == TokenType::Division || token == TokenType::Equals 
+        token == TokenType::Plus || token == TokenType::Minus || token == TokenType::Multiplication || token == TokenType::Division || token == TokenType::Equals || token == TokenType::PlusEquals || token == TokenType::MinusEquals || token == TokenType::PlusPlus || token == TokenType::MinusMinus
     }
 
     pub fn is_binary_operator(token: TokenType) -> bool {
@@ -566,7 +587,11 @@ impl SemanticAnalyzer {
         let index = entry_info.index.clone();
         
         self.set_return_value = false;
-        self.set_value &= TokenType::is_operator(token.clone());
+        if token == TokenType::PlusPlus || token == TokenType::MinusMinus {
+            self.set_value = false;
+        } else {
+            self.set_value &= TokenType::is_operator(token.clone());
+        }
         let in_call_or_reasign = in_reasignment || in_function_call || in_nested_call;
 
         if in_function_call || in_nested_call {
@@ -974,7 +999,23 @@ impl SemanticAnalyzer {
             }
 
             if !w.word.is_empty() {
-                normalized_words.push(w);
+                if w.word.len() > 2 && w.word.ends_with("++") {
+                    let mut var_word = w.clone();
+                    var_word.word = w.word[..w.word.len()-2].to_string();
+                    let mut op_word = w.clone();
+                    op_word.word = "++".to_string();
+                    normalized_words.push(var_word);
+                    normalized_words.push(op_word);
+                } else if w.word.len() > 2 && w.word.ends_with("--") {
+                    let mut var_word = w.clone();
+                    var_word.word = w.word[..w.word.len()-2].to_string();
+                    let mut op_word = w.clone();
+                    op_word.word = "--".to_string();
+                    normalized_words.push(var_word);
+                    normalized_words.push(op_word);
+                } else {
+                    normalized_words.push(w);
+                }
             }
         }
 

@@ -11,6 +11,9 @@ pub enum Operator {
     Equals,
 
     LogicalEquals,
+    NotEquals,
+    GreaterThan,
+    LessThan,
     LogicalAnd,
     LogicalOr,
     Not,
@@ -33,6 +36,9 @@ impl Operator {
             "=" => Operator::Equals,
 
             "==" => Operator::LogicalEquals,
+            "!=" => Operator::NotEquals,
+            ">" => Operator::GreaterThan,
+            "<" => Operator::LessThan,
             "&&" => Operator::LogicalAnd,
             "||" => Operator::LogicalOr,
             "!" => Operator::Not,
@@ -54,6 +60,9 @@ impl Operator {
             Operator::Division => "/",
             Operator::Equals => "=",
             Operator::LogicalEquals => "==",
+            Operator::NotEquals => "!=",
+            Operator::GreaterThan => ">",
+            Operator::LessThan => "<",
             Operator::LogicalAnd => "&&",
             Operator::LogicalOr => "||",
             Operator::Not => "!",
@@ -205,7 +214,7 @@ impl ThreeAddressCodeGenerator {
             Operator::LogicalAnd => 2,
             Operator::Or => 3,
             Operator::And => 4,
-            Operator::LogicalEquals => 5,
+            Operator::LogicalEquals | Operator::NotEquals | Operator::GreaterThan | Operator::LessThan => 5,
             Operator::LeftBitShift | Operator::RightBitShift => 6,
             Operator::Plus | Operator::Minus => 7,
             Operator::Multiplication | Operator::Division => 8,
@@ -536,9 +545,39 @@ impl ThreeAddressCodeGenerator {
         let target_ref = Self::symbol_ref(reassignment.target, &reassignment.target_scope);
         let value_type = Some(reassignment.token_type);
 
-        if let Some(array_idx) = reassignment.array_index {
-            let tokens: Vec<Value> = reassignment.parameters.unwrap_or_default().iter().map(|e| Self::table_type_to_value(e)).collect();
+        let raw_tokens: Vec<Value> = reassignment.parameters.unwrap_or_default().iter().map(|e| Self::table_type_to_value(e)).collect();
 
+        let left_op = if let Some(ref idx_str) = reassignment.array_index {
+            Value::Index(reassignment.name.clone(), idx_str.clone())
+        } else {
+            Value::Var(reassignment.name.clone())
+        };
+
+        let tokens = if let Some(Value::Var(op_str)) = raw_tokens.first() {
+            match op_str.as_str() {
+                "+=" => {
+                    let mut desugared = vec![left_op, Value::Var("+".to_string())];
+                    desugared.extend(raw_tokens.into_iter().skip(1));
+                    desugared
+                }
+                "-=" => {
+                    let mut desugared = vec![left_op, Value::Var("-".to_string())];
+                    desugared.extend(raw_tokens.into_iter().skip(1));
+                    desugared
+                }
+                "++" => {
+                    vec![left_op, Value::Var("+".to_string()), Value::Var("1".to_string())]
+                }
+                "--" => {
+                    vec![left_op, Value::Var("-".to_string()), Value::Var("1".to_string())]
+                }
+                _ => raw_tokens,
+            }
+        } else {
+            raw_tokens
+        };
+
+        if let Some(array_idx) = reassignment.array_index {
             let rhs_val = if tokens.len() == 1 {
                 let (val, _) = self.evaluate_value(&tokens[0], value_type.clone());
                 val
@@ -558,8 +597,6 @@ impl ThreeAddressCodeGenerator {
             });
             return;
         }
-
-        let tokens: Vec<Value> = reassignment.parameters.unwrap_or_default().iter().map(|e| Self::table_type_to_value(e)).collect();
 
         if reassignment.ptr == Some(PointerType::Pointer) {
             if tokens.len() == 1 {

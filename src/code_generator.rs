@@ -279,8 +279,9 @@ impl CodeGen {
                 let b_slot = self.get_or_alloc_slot(&variable.arguments[1]);
                 self.code_gen_logical_op("or", a_slot, b_slot, t_offset);
             }
-            Some(Operator::LogicalEquals) => {
+            Some(Operator::LogicalEquals) | Some(Operator::NotEquals) | Some(Operator::GreaterThan) | Some(Operator::LessThan) => {
                 let b_slot = self.get_or_alloc_slot(&variable.arguments[1]);
+                let is_fp = is_f32 || is_f64;
                 if is_f32 {
                     self.emit(&format!("    movss xmm0, dword {}", a_slot.to_asm_op()));
                     self.emit(&format!("    ucomiss xmm0, dword {}", b_slot.to_asm_op()));
@@ -292,7 +293,17 @@ impl CodeGen {
                     self.emit(&format!("    cmp rax, {}", b_slot.to_asm_op()));
                 }
                 
-                self.emit("    sete al");
+                let set_inst = match (variable.operator.as_ref().unwrap(), is_fp) {
+                    (Operator::LogicalEquals, _) => "sete",
+                    (Operator::NotEquals, _) => "setne",
+                    (Operator::GreaterThan, false) => "setg",
+                    (Operator::GreaterThan, true) => "seta",
+                    (Operator::LessThan, false) => "setl",
+                    (Operator::LessThan, true) => "setb",
+                    _ => unreachable!(),
+                };
+
+                self.emit(&format!("    {} al", set_inst));
                 self.emit("    movzx rax, al");
                 self.emit(&format!("    mov [rbp - {}], rax", t_offset));
                 self.emit("");
@@ -677,8 +688,14 @@ impl CodeGen {
                     self.emit(&format!("    cmp rax, {}", b_slot.to_asm_op()));
                 }
 
-                let jump_mnemonic = match op {
-                    Operator::LogicalEquals => "jne",
+                let is_fp = is_f32 || is_f64;
+                let jump_mnemonic = match (op, is_fp) {
+                    (Operator::LogicalEquals, _) => "jne",
+                    (Operator::NotEquals, _) => "je",
+                    (Operator::GreaterThan, false) => "jle",
+                    (Operator::GreaterThan, true) => "jbe",
+                    (Operator::LessThan, false) => "jge",
+                    (Operator::LessThan, true) => "jae",
                     _ => panic!("unsupported conditional operator: {:?}", op),
                 };
                 self.emit(&format!("    {} {}", jump_mnemonic, label));

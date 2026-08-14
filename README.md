@@ -46,18 +46,25 @@
 | Token | Lexeme | Description |
 |---|---|---|
 | `IF` | `if` | Conditional |
-| `ELSE` | `else` | Fallback for `if` |
 | `INT` | `int` | Integer |
 | `FLOAT` | `float` | Float |
 | `BOOL` | `bool` | Boolean |
 | `CHAR` | `char` | Character |
-| `STRING` | `string` | String |
 | `PLUS` | `+` | Addition |
 | `MINUS` | `-` | Subtraction |
 | `MULTIPLICATION` | `*` | Multiplication |
 | `DIVISION` | `/` | Division |
 | `EQUALS` | `=` | Assignment |
+| `PLUS_EQUALS` | `+=` | Addition assignment |
+| `MINUS_EQUALS` | `-=` | Subtraction assignment |
+| `PLUS_PLUS` | `++` | Increment by one |
+| `MINUS_MINUS` | `--` | Decrement by one |
 | `LOGICAL_EQUALS` | `==` | Equality comparison |
+| `NOT_EQUALS` | `!=` | Not equals comparison |
+| `GREATER_THAN` | `>` | Greater than comparison |
+| `LESS_THAN` | `<` | Less than comparison |
+| `GREATER_THAN_EQUALS` | `>=` | Greater than or equals comparison |
+| `LESS_THAN_EQUALS` | `<=` | Less than or equals comparison |
 | `LOGICAL_AND` | `&&` | Logical AND |
 | `LOGICAL_OR` | `\|\|` | Logical OR |
 | `NOT` | `!` | Logical negation |
@@ -82,8 +89,7 @@
 - [x] Fix a bug that happens when you add to return in one function. 
 - [x] Add Pointers
 - [x] Add Arrays
-- [ ] Add Chars
-- [ ] Add String
+- [x] Add Chars
 - [ ] Add for loop
 - [ ] Check if the operator make sense
 - [ ] Precompile operations is posible
