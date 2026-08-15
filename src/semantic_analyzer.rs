@@ -1,5 +1,5 @@
 use crate::parser::{Block, Word};
-use crate::variable_types::{Variable, Function, Reasingment, FunctionCall, Conditional, Loop, Return, Types, Value, PointerType};
+use crate::variable_types::{Variable, Function, Reasingment, FunctionCall, Conditional, Loop, Return, StructLiteral, Types, Value, PointerType};
 use std::vec::Vec;
 use crate::enbeded_funcs::FUNCTIONS;
 
@@ -55,6 +55,8 @@ pub enum TokenType {
     Return,
     ReturnType,
 
+    StructLiteral,
+
     WhileLoop,
     
     Unknow,
@@ -99,6 +101,8 @@ impl TokenType {
             "fn" => TokenType::FnLiteral,
             "return" => TokenType::Return,
             "->" => TokenType::ReturnType,
+
+            "struct" => TokenType::StructLiteral,
 
             "while" => TokenType::WhileLoop,
 
@@ -152,6 +156,8 @@ impl TokenType {
             TokenType::FnLiteral => "fn".to_string(),
             TokenType::Return => "return".to_string(),
             TokenType::ReturnType => "->".to_string(),
+
+            TokenType::StructLiteral => "struct".to_string(),
 
             TokenType::WhileLoop => "while".to_string(),
 
@@ -220,6 +226,7 @@ pub enum TableTypes {
     Conditional(Conditional),
     Loop(Loop),
     Return(Return),
+    StructLiteral(StructLiteral),
     Unknown,
 }
 
@@ -237,6 +244,7 @@ impl TableTypes {
             TokenType::Unknow => TableTypes::Reasingment(Reasingment::new(TokenType::Unknow)),
             TokenType::Int | TokenType::Float | TokenType::Double
             | TokenType::Bool | TokenType::Char | TokenType::String => TableTypes::Variable(Variable::new(token)),
+            TokenType::StructLiteral => TableTypes::StructLiteral(StructLiteral::new(token)),
             _ if TokenType::is_value(token) && token != TokenType::Unknow => TableTypes::Variable(Variable::new(token)),
             _ => TableTypes::Unknown,
         }
@@ -251,6 +259,7 @@ impl TableTypes {
             TableTypes::Conditional(con) => con.finished_definition(),
             TableTypes::Loop(while_loop) => while_loop.finished_definition(),
             TableTypes::Return(returns) => returns.finished_definition(),
+            TableTypes::StructLiteral(struct_literal) => struct_literal.finished_definition(),
             _ => {true},
         }
     }
@@ -264,6 +273,7 @@ impl TableTypes {
             TableTypes::Conditional(con) => con.add_arguments(argument),
             TableTypes::Loop(while_loop) => while_loop.add_arguments(argument),
             TableTypes::Return(returns) => returns.add_arguments(argument),
+            TableTypes::StructLiteral(struct_literal) => struct_literal.add_arguments(argument),
             _ => {}
         }
     }
@@ -343,6 +353,7 @@ impl SemanticAnalyzer {
             return Some(result);
         } else {
             return self.resolve_in_parameters(&lookup_name);
+            
         }
     }
 
@@ -449,19 +460,18 @@ impl SemanticAnalyzer {
             TableTypes::Reasingment(ref mut re) => re.ptr = self.ptr_type.clone(),
             _ => {}
         }
+        
+        self.defining_fn |= token == TokenType::FnLiteral;
 
         self.active_table().push(table_type)
     }
 
     fn active_table(&mut self) -> &mut Vec<TableTypes> {
-        if self.defining_fn {
-            Self::desend_table(self.defining_parameters, &mut self.table, 1, self.max_nesting)
-        } else {
-            &mut self.table
-        }
+        Self::desend_table(self.defining_parameters, self.defining_fn, &mut self.table, 1, self.max_nesting)
+
     }
 
-    fn desend_table(defining_parameters: bool, last_table: &mut Vec<TableTypes>, current_nest_level: usize, max_nesting: usize) -> &mut Vec<TableTypes> {
+    fn desend_table( defining_parameters: bool, defining_fn: bool, last_table: &mut Vec<TableTypes>, current_nest_level: usize, max_nesting: usize) -> &mut Vec<TableTypes> {
         if let Some(entry) = last_table.last() {
             if Self::pending_call_in(entry).is_some() {
                 return last_table;
@@ -470,7 +480,7 @@ impl SemanticAnalyzer {
 
         let has_child = matches!(
             last_table.last(),
-            Some(TableTypes::Function(_)) | Some(TableTypes::Conditional(_)) | Some(TableTypes::Loop(_))
+            Some(TableTypes::Function(_)) | Some(TableTypes::Conditional(_)) | Some(TableTypes::Loop(_)) | Some(TableTypes::StructLiteral(_))
         );
 
         if !has_child || (current_nest_level == max_nesting ) && !defining_parameters {
@@ -490,15 +500,22 @@ impl SemanticAnalyzer {
                 if defining_parameters && func.table.is_empty() {
                     func.parameters.get_or_insert_with(Vec::new)
                 } else {
-                    Self::desend_table(defining_parameters, &mut func.table, current_nest_level + 1, max_nesting)
+                    Self::desend_table(defining_parameters, defining_fn, &mut func.table, current_nest_level + 1, max_nesting)
                 }
             },
             TableTypes::Conditional(con) => {
-                Self::desend_table(defining_parameters, &mut con.table, current_nest_level + 1, max_nesting)
+                Self::desend_table(defining_parameters, defining_fn, &mut con.table, current_nest_level + 1, max_nesting)
             },
             TableTypes::Loop(while_loop) => {
-                Self::desend_table(defining_parameters, &mut while_loop.table, current_nest_level + 1, max_nesting)
+                Self::desend_table(defining_parameters, defining_fn, &mut while_loop.table, current_nest_level + 1, max_nesting)
             },
+            TableTypes::StructLiteral(struct_literal) => {
+                if defining_fn {
+                    Self::desend_table(defining_parameters, defining_fn, &mut struct_literal.functions, current_nest_level + 1, max_nesting)
+                } else {
+                    Self::desend_table(defining_parameters, defining_fn, &mut struct_literal.arguments, current_nest_level + 1, max_nesting)
+                }
+            }
             _ => unreachable!(),
         }
     }
@@ -822,6 +839,7 @@ impl SemanticAnalyzer {
                 Self::promote_pending_var_to_call(var, idx, word, scope);
                 Self::check_func_return_type(error_messages, table, idx, var_type, call_word);
             }
+
             TableTypes::Reasingment(reasign) if is_func => {
                 let reasign_type = reasign.token_type;
                 if let Some(last) = reasign.parameters.as_mut().and_then(|p| p.last_mut()) {

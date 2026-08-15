@@ -41,6 +41,7 @@
     ```
 
 ---
+
 ## Token types
 > Not every token is fully implemented yet
 
@@ -86,11 +87,9 @@
 
 ## Todo
 
-- [x] Make it so conditionals/loop dont write in codionion inside of them insted write a variable and call that. Works but is it is only one comparizon it does reasing to the variable.
-- [x] Fix a bug that happens when you add to return in one function. 
-- [x] Add Pointers
-- [x] Add Arrays
-- [x] Add Chars
+- [ ] Add structs
+- [ ] Add function realated to the structs
+- [ ] Add enums
 - [ ] Add for loop
 - [ ] Check if the operator make sense
 - [ ] Precompile operations is posible
@@ -99,8 +98,12 @@
 
 ## Long tenm goals
 
-- [ ] Add a simple standar library
-
+- [ ] Add a function that says how many elemnts does an array have
+- [ ] Make enum store values, like rust
+- [ ] Add heap
+- [ ] Add vectors
+- [ ] Add helper functions to vectors
+- [ ] Add multithreadding
 
 ## Example 
 
