@@ -6,10 +6,10 @@ use crate::enbeded_funcs::FUNCTIONS;
 struct Entry {
     word: Word,
     token: TokenType, 
-    index: Option<(usize, Scope, bool)>,
+    index: Option<(usize, Scope, ResolveType)>,
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum TokenType {
     If,
     Else,
@@ -56,6 +56,7 @@ pub enum TokenType {
     ReturnType,
 
     StructLiteral,
+    StructDef(String),
 
     WhileLoop,
     
@@ -158,6 +159,7 @@ impl TokenType {
             TokenType::ReturnType => "->".to_string(),
 
             TokenType::StructLiteral => "struct".to_string(),
+            TokenType::StructDef(name) => format!("struct type of {}", name.clone()),
 
             TokenType::WhileLoop => "while".to_string(),
 
@@ -203,7 +205,7 @@ impl TokenType {
             TokenType::CharLiteral => Some(TokenType::Char),
             TokenType::BoolLiteral => Some(TokenType::Bool),
             TokenType::Int | TokenType::Float | TokenType::Double
-            | TokenType::String | TokenType::Bool | TokenType::Char => Some(*self),
+            | TokenType::String | TokenType::Bool | TokenType::Char => Some(self.clone()),
             _ => None,
         }
     }
@@ -243,9 +245,9 @@ impl TableTypes {
             TokenType::WhileLoop => TableTypes::Loop(Loop::new(token)),
             TokenType::Unknow => TableTypes::Reasingment(Reasingment::new(TokenType::Unknow)),
             TokenType::Int | TokenType::Float | TokenType::Double
-            | TokenType::Bool | TokenType::Char | TokenType::String => TableTypes::Variable(Variable::new(token)),
+            | TokenType::Bool | TokenType::Char | TokenType::String | TokenType::StructDef(_) => TableTypes::Variable(Variable::new(token)),
             TokenType::StructLiteral => TableTypes::StructLiteral(StructLiteral::new(token)),
-            _ if TokenType::is_value(token) && token != TokenType::Unknow => TableTypes::Variable(Variable::new(token)),
+            _ if TokenType::is_value(token.clone()) && token.clone() != TokenType::Unknow => TableTypes::Variable(Variable::new(token)),
             _ => TableTypes::Unknown,
         }
     }
@@ -277,6 +279,13 @@ impl TableTypes {
             _ => {}
         }
     }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+enum ResolveType {
+    Variable,
+    Function,
+    Struct,
 }
 
 struct SemanticAnalyzer {
@@ -345,7 +354,7 @@ impl SemanticAnalyzer {
         }
     } 
 
-    fn resolve(&mut self, name: String) -> Option<(usize, Scope, bool)> {
+    fn resolve(&mut self, name: String) -> Option<(usize, Scope, ResolveType)> {
         let lookup_name = crate::variable_types::parse_array_syntax(&name)
             .map(|(arr_name, _)| arr_name)
             .unwrap_or(name);
@@ -370,16 +379,13 @@ impl SemanticAnalyzer {
         (false, 0)
     }
 
-    fn find_in_level(name: &str, table: &Vec<TableTypes>, nest_level: usize) -> Option<(usize, Scope, bool)> {
+    fn find_in_level(name: &str, table: &Vec<TableTypes>, nest_level: usize) -> Option<(usize, Scope, ResolveType)> {
         let (is_enbeded_func, index) = Self::is_enbeded_func(name.to_string());
         table.iter().enumerate().find_map(|(idx, entry)| match entry {
-            TableTypes::Variable(v) if v.name.as_deref() == Some(name) => {
-                Some((idx, Self::scope_for_level(nest_level), false))
-            }
-            TableTypes::Function(f) if f.name.as_deref() == Some(name) => {
-                Some((idx, Self::scope_for_level(nest_level), true))
-            }
-            _ if is_enbeded_func => Some((index, Scope::EnbedFunc, true)),
+            TableTypes::Variable(v) if v.name.as_deref() == Some(name) => Some((idx, Self::scope_for_level(nest_level), ResolveType::Variable)),
+            TableTypes::Function(f) if f.name.as_deref() == Some(name) => Some((idx, Self::scope_for_level(nest_level), ResolveType::Function)),
+            TableTypes::StructLiteral(s) if s.name == name => Some((idx, Self::scope_for_level(nest_level), ResolveType::Struct)),
+            _ if is_enbeded_func => Some((index, Scope::EnbedFunc, ResolveType::Function)),
             _ => None,
         })
     }
@@ -408,7 +414,9 @@ impl SemanticAnalyzer {
         !nesting_exhausted && !blocked_by_params
     }
 
-    fn descend_and_resolve(name: &str, table: &mut Vec<TableTypes>, current_nest_level: usize, max_nesting: usize, defining_parameters: bool) -> Option<(usize, Scope, bool)> {
+    fn descend_and_resolve(name: &str, table: &mut Vec<TableTypes>, current_nest_level: usize, 
+        max_nesting: usize, defining_parameters: bool) -> Option<(usize, Scope, ResolveType)> {
+        
         match table.last_mut().unwrap() {
             TableTypes::Function(func) => {
                 if defining_parameters && func.table.is_empty() {
@@ -427,7 +435,9 @@ impl SemanticAnalyzer {
         }
     }
 
-    fn resolve_in_chain( name: &str, table: &mut Vec<TableTypes>, current_nest_level: usize, max_nesting: usize, defining_parameters: bool) -> Option<(usize, Scope, bool)> {
+    fn resolve_in_chain( name: &str, table: &mut Vec<TableTypes>, current_nest_level: usize, 
+        max_nesting: usize, defining_parameters: bool) -> Option<(usize, Scope, ResolveType)> {
+
         if Self::should_descend(table, current_nest_level, max_nesting, defining_parameters) {
             if let Some(found) = Self::descend_and_resolve(name, table, current_nest_level, max_nesting, defining_parameters) {
                 return Some(found);
@@ -437,7 +447,7 @@ impl SemanticAnalyzer {
         Self::find_in_level(name, table, current_nest_level)
     }
 
-    fn resolve_in_parameters(&self, name: &str) -> Option<(usize, Scope, bool)> {
+    fn resolve_in_parameters(&self, name: &str) -> Option<(usize, Scope, ResolveType)> {
         if !self.defining_fn {
             return None;
         }
@@ -448,13 +458,13 @@ impl SemanticAnalyzer {
         let params = f.parameters.as_ref()?;
 
         params.iter().enumerate().find_map(|(idx, entry)| match entry {
-            TableTypes::Variable(v) if v.name.as_deref() == Some(name) => Some((idx, Scope::Parameter, false)),
+            TableTypes::Variable(v) if v.name.as_deref() == Some(name) => Some((idx, Scope::Parameter, ResolveType::Variable)),
             _ => None,
         })
     }
 
     fn add_entry(&mut self, token: TokenType) {
-        let mut table_type: TableTypes = TableTypes::from_token(token);
+        let mut table_type: TableTypes = TableTypes::from_token(token.clone());
         match table_type {
             TableTypes::Variable(ref mut var) => var.ptr = self.ptr_type.clone(),
             TableTypes::Reasingment(ref mut re) => re.ptr = self.ptr_type.clone(),
@@ -638,7 +648,7 @@ impl SemanticAnalyzer {
                     };
 
                     if vt != var.token_type && !corrrect_ptr_type {
-                        mismatch = Some((var.token_type, Some(vt), rhs_ptr_type.clone()));
+                        mismatch = Some((var.token_type.clone(), Some(vt), rhs_ptr_type.clone()));
                     }
                 }   
             }
@@ -653,8 +663,8 @@ impl SemanticAnalyzer {
                         };
 
 
-                        if vt != reasign.token_type && !TokenType::is_operator(reasign.token_type) && !corrrect_ptr_type {
-                            mismatch = Some((reasign.token_type, Some(vt), rhs_ptr_type));
+                        if vt != reasign.token_type && !TokenType::is_operator(reasign.token_type.clone()) && !corrrect_ptr_type {
+                            mismatch = Some((reasign.token_type.clone(), Some(vt), rhs_ptr_type));
                         }
                     }
                 }
@@ -745,7 +755,7 @@ impl SemanticAnalyzer {
             f.parameters.as_ref()
                 .and_then(|params| params.get(fc_params_len))
                 .map(|p| match p {
-                    TableTypes::Variable(v) => (Some(v.token_type), v.ptr.clone()),
+                    TableTypes::Variable(v) => (Some(v.token_type.clone()), v.ptr.clone()),
                     _ => (None, None),
                 })
                 .unwrap_or((None, None))
@@ -797,7 +807,7 @@ impl SemanticAnalyzer {
         }
     }
 
-    fn declared_type_of(&self, index: &Option<(usize, Scope, bool)>) -> Option<TokenType> {
+    fn declared_type_of(&self, index: &Option<(usize, Scope, ResolveType)>) -> Option<TokenType> {
         let (idx, scope, _) = index.as_ref()?;
 
         let entry = match scope {
@@ -822,26 +832,27 @@ impl SemanticAnalyzer {
         };
 
         match entry {
-            Some(TableTypes::Variable(v)) => Some(v.token_type),
+            Some(TableTypes::Variable(v)) => Some(v.token_type.clone()),
             _ => None,
         }
     }
 
-    fn add_caller_info(new_entry: &mut TableTypes, index: Option<(usize, Scope, bool)>, word: String, 
+    fn add_caller_info(new_entry: &mut TableTypes, index: Option<(usize, Scope, ResolveType)>, word: String, 
         table: &Vec<TableTypes>, error_messages: &mut Vec<String>, call_word: &Word) {
         
-        let Some((idx, scope, is_func)) = index else { return };
+        let Some((idx, scope, resolve_type)) = index else { return };
+        let is_func = resolve_type == ResolveType::Function;
 
         match new_entry {
-            TableTypes::FunctionCall(fc) => Self::add_caller_info_on_call(fc, Some((idx, scope, is_func)), word),
+            TableTypes::FunctionCall(fc) => Self::add_caller_info_on_call(fc, Some((idx, scope, resolve_type)), word),
             TableTypes::Variable(var) if is_func => {
-                let var_type = var.token_type;
+                let var_type = var.token_type.clone();
                 Self::promote_pending_var_to_call(var, idx, word, scope);
                 Self::check_func_return_type(error_messages, table, idx, var_type, call_word);
             }
 
             TableTypes::Reasingment(reasign) if is_func => {
-                let reasign_type = reasign.token_type;
+                let reasign_type = reasign.token_type.clone();
                 if let Some(last) = reasign.parameters.as_mut().and_then(|p| p.last_mut()) {
                     if let TableTypes::Reasingment(_) = last {
                         *last = TableTypes::FunctionCall(FunctionCall {
@@ -871,7 +882,7 @@ impl SemanticAnalyzer {
 
     fn check_func_return_type(error_messages: &mut Vec<String>, table: &Vec<TableTypes>, func_idx: usize, expected_type: TokenType, word: &Word) {
         let return_type = table.get(func_idx).and_then(|e| {
-            if let TableTypes::Function(f) = e { f.return_type } else { None }
+            if let TableTypes::Function(f) = e { f.return_type.clone() } else { None }
         });
 
         if let Some(ret_type) = return_type {
@@ -902,10 +913,11 @@ impl SemanticAnalyzer {
         }
     }
 
-    fn add_caller_info_on_call(fc: &mut FunctionCall, index: Option<(usize, Scope, bool)>, word: String) {
-        let Some((idx, scope, is_func)) = index else { return };
+    fn add_caller_info_on_call(fc: &mut FunctionCall, index: Option<(usize, Scope, ResolveType)>, word: String) {
+        let Some((idx, scope, resolve_type)) = index else { return };
         let Some(last) = fc.parameters.as_mut().and_then(|p| p.last_mut()) else { return };
         let TableTypes::Reasingment(v) = last else { return };
+        let is_func = resolve_type == ResolveType::Function;
 
         if is_func {
             *last = TableTypes::FunctionCall(FunctionCall {
@@ -925,14 +937,14 @@ impl SemanticAnalyzer {
         let word = entry_info.word.clone();
         let index = entry_info.index.clone();
 
-        if !TokenType::is_value(token) {
-            self.add_entry(token);
+        if !TokenType::is_value(token.clone()) {
+            self.add_entry(token.clone());
         } else if index.is_some() {
             self.set_value = true;
 
-            let (idx, scope, is_func) = index.expect("Error finding the index of the value to be reasign");
+            let (idx, scope, resolve_type) = index.expect("Error finding the index of the value to be reasign");
             
-            if is_func {
+            if resolve_type == ResolveType::Function {
                 let func_call = FunctionCall {
                     target: idx,
                     parameters: None,
@@ -940,8 +952,9 @@ impl SemanticAnalyzer {
                     scope: scope,
                 };
                 self.active_table().push(TableTypes::FunctionCall(func_call));
+            } else if resolve_type == ResolveType::Struct {
+                self.add_entry(TokenType::StructDef(word.word));
             } else {
-                println!("Reasingment {}", word.word);
                 let target_type = match scope {
                     Scope::Root => self.table.get(idx),
                     Scope::Function | Scope::Parameter => self.table.iter().rev().find_map(|t| {
@@ -950,7 +963,7 @@ impl SemanticAnalyzer {
                     Scope::EnbedFunc => todo!()
                 };
                 let token_type = match target_type {
-                    Some(TableTypes::Variable(v)) => v.token_type,
+                    Some(TableTypes::Variable(v)) => v.token_type.clone(),
                     _ => TokenType::Unknow,
                 };
 

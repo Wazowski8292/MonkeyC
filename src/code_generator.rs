@@ -129,7 +129,7 @@ impl CodeGen {
     fn get_slot_info(&self, name: &str) -> (TokenType, bool) {
         self.slot_map
             .get(name)
-            .map(|(_, tok, is_ptr)| (*tok, *is_ptr))
+            .map(|(_, tok, is_ptr)| (tok.clone(), *is_ptr))
             .unwrap_or_else(|| (TokenType::from_str(name), false))
     }
 
@@ -222,7 +222,7 @@ impl CodeGen {
             return Slot::Data(label);
         }
 
-        if TokenType::is_value(token) && token != TokenType::Unknow {
+        if TokenType::is_value(token.clone()) && token.clone() != TokenType::Unknow {
             if token == TokenType::BoolLiteral {
                 if name == "true" {
                     return Slot::Const(1.to_string());
@@ -350,15 +350,15 @@ impl CodeGen {
 
     fn add_param(&mut self, param: &Tac) {
         let param_name = param.arguments.get(0).map(String::as_str).unwrap_or("?");
-        let param_type = param.value_type.unwrap_or(TokenType::Int);
+        let param_type = param.value_type.clone().unwrap_or(TokenType::Int);
         let is_ptr = param.is_ptr;
 
         self.offset -= 8;
         let offset = self.offset;
-        self.slot_map.insert(param_name.to_string(), (offset, param_type, is_ptr));
+        self.slot_map.insert(param_name.to_string(), (offset, param_type.clone(), is_ptr));
 
-        let is_f32 = matches!(param_type, TokenType::Float) && !is_ptr;
-        let is_f64 = matches!(param_type, TokenType::Double) && !is_ptr;
+        let is_f32 = matches!(param_type.clone(), TokenType::Float) && !is_ptr;
+        let is_f64 = matches!(param_type.clone(), TokenType::Double) && !is_ptr;
 
         if is_f32 {
             if self.param_fp_idx < FP_ARG_REGS.len() {
@@ -504,7 +504,7 @@ impl CodeGen {
 
         let is_literal = {
             let tok = TokenType::from_str(ptr_name);
-            TokenType::is_value(tok) && tok != TokenType::Unknow
+            TokenType::is_value(tok.clone()) && tok.clone() != TokenType::Unknow
         };
 
         if is_literal || !self.slot_map.contains_key(ptr_name) {
@@ -557,7 +557,7 @@ impl CodeGen {
         let name = tac.result.as_deref().unwrap_or("");
         let size = tac.arguments.get(0).and_then(|s| s.parse::<i32>().ok()).unwrap_or(1);
         self.offset -= size * 8;
-        self.slot_map.insert(name.to_string(), (self.offset, tac.value_type.unwrap_or(TokenType::Int), false));
+        self.slot_map.insert(name.to_string(), (self.offset, tac.value_type.clone().unwrap_or(TokenType::Int), false));
     }
 
     fn add_array_index(&mut self, tac: &Tac) {

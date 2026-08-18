@@ -389,7 +389,7 @@ impl ThreeAddressCodeGenerator {
             let (param_name, param_type, is_ptr) = match &parameter {
                 TableTypes::Variable(var) => (
                     var.name.clone().unwrap_or_default(),
-                    Some(var.token_type),
+                    Some(var.token_type.clone()),
                     var.ptr.is_some(),
                 ),
                 _ => (Self::extract_operand(&parameter), None, false),
@@ -713,7 +713,7 @@ impl ThreeAddressCodeGenerator {
     }
 
     fn add_return(&mut self, returns: Return) {
-        let value_type = self.current_return_type.or_else(|| returns.value.as_ref().map(|v| v.token_type));
+        let value_type = self.current_return_type.clone().or_else(|| returns.value.as_ref().map(|v| v.token_type.clone()));
         let tokens = returns.value.and_then(|v| v.value).unwrap_or_default();
 
         if tokens.is_empty() {
@@ -722,7 +722,7 @@ impl ThreeAddressCodeGenerator {
                 arguments: vec![],
                 operator: None,
                 result: None,
-                value_type: self.current_return_type,
+                value_type: self.current_return_type.clone(),
                 is_ptr: false,
             });
             return;
@@ -760,7 +760,7 @@ impl ThreeAddressCodeGenerator {
             }
             Type::Param => {
                 let name = tac.arguments.get(0).map(String::as_str).unwrap_or("?");
-                let ty = tac.value_type.map_or("unknown".to_string(), |t| t.to_str());
+                let ty = tac.value_type.clone().map_or("unknown".to_string(), |t| t.to_str());
                 format!("{pad}param {ty} {name}")
             }
             Type::LoopEnd => {
