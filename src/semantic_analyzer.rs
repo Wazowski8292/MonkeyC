@@ -1070,23 +1070,35 @@ impl SemanticAnalyzer {
                 i += 1;
             }
 
-            if !w.word.is_empty() {
-                if w.word.len() > 2 && w.word.ends_with("++") {
-                    let mut var_word = w.clone();
-                    var_word.word = w.word[..w.word.len()-2].to_string();
-                    let mut op_word = w.clone();
-                    op_word.word = "++".to_string();
-                    normalized_words.push(var_word);
-                    normalized_words.push(op_word);
-                } else if w.word.len() > 2 && w.word.ends_with("--") {
-                    let mut var_word = w.clone();
-                    var_word.word = w.word[..w.word.len()-2].to_string();
-                    let mut op_word = w.clone();
-                    op_word.word = "--".to_string();
-                    normalized_words.push(var_word);
-                    normalized_words.push(op_word);
-                } else {
-                    normalized_words.push(w);
+            if w.word.is_empty() { 
+                return;
+            }
+            
+            if w.word.len() > 2 && w.word.ends_with("++") {
+                let mut var_word = w.clone();
+                var_word.word = w.word[..w.word.len()-2].to_string();
+                let mut op_word = w.clone();
+                op_word.word = "++".to_string();
+                normalized_words.push(var_word);
+               normalized_words.push(op_word);
+            } else if w.word.len() > 2 && w.word.ends_with("--") {
+                let mut var_word = w.clone();
+                var_word.word = w.word[..w.word.len()-2].to_string();
+                let mut op_word = w.clone();
+                op_word.word = "--".to_string();
+                normalized_words.push(var_word);
+                normalized_words.push(op_word);
+            } else {
+                let mut char_count = 0;
+                for word in w.word.split(".") {
+                    let tmp_word = Word {
+                        word: word.to_string(),
+                        line: w.line,
+                        char_num: Some(w.char_num.unwrap_or(0) + char_count),
+                    };
+
+                    normalized_words.push(tmp_word);
+                    char_count += word.len();
                 }
             }
         }
@@ -1095,7 +1107,6 @@ impl SemanticAnalyzer {
             self.tokenize_word(word);
         }
     }
-
 
     fn print_errors(&self, code: Vec<String>, file_name: String) {
     for error in self.error_messages.iter() {
@@ -1161,6 +1172,176 @@ impl SemanticAnalyzer {
 
         (start + 1, end - start)
     }
+
+    pub fn _print(&self) {
+        println!("\n---------------------- \n");
+        println!("{}", Self::_format_table(&self.table, 0));
+        println!("\n---------------------- \n");
+    }
+ 
+    fn _format_table(table: &Vec<TableTypes>, level: usize) -> String {
+        table
+            .iter()
+            .map(|item| Self::_format_item(item, level))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+ 
+    fn _format_item(item: &TableTypes, level: usize) -> String {
+        let p = "    ".repeat(level);
+        match item {
+            TableTypes::Variable(v) => {
+                let array_note = if v.is_array {
+                    format!(" [array; size={:?}]", v.array_size)
+                } else {
+                    String::new()
+                };
+                format!(
+                    "{p}var {}{}: {:?} = {}{}",
+                    Self::_format_ptr(&v.ptr),
+                    v.name.clone().unwrap_or_else(|| "_".to_string()),
+                    v.token_type,
+                    Self::_format_values(&v.value),
+                    array_note,
+                )
+            }
+ 
+            TableTypes::Function(f) => {
+                let ret = f
+                    .return_type
+                    .as_ref()
+                    .map(|t| t.to_str())
+                    .unwrap_or_else(|| "void".to_string());
+                let header = format!(
+                    "{p}fn {}() -> {} {{",
+                    f.name.clone().unwrap_or_else(|| "_".to_string()),
+                    ret
+                );
+                let body = Self::_format_table(&f.table, level + 1);
+                format!("{header}\n{body}\n{p}}}")
+            }
+ 
+            TableTypes::Reasingment(r) => {
+                let params = r
+                    .parameters
+                    .as_ref()
+                    .map(|p| p.iter().map(Self::_format_item_inline).collect::<Vec<_>>().join(", "))
+                    .unwrap_or_default();
+                let idx = r
+                    .array_index
+                    .as_ref()
+                    .map(|i| format!("[{}]", i))
+                    .unwrap_or_default();
+                format!(
+                    "{p}{}{}{} = {}  ({:?}, scope={:?}, target={})",
+                    Self::_format_ptr(&r.ptr),
+                    r.name,
+                    idx,
+                    params,
+                    r.token_type,
+                    r.target_scope,
+                    r.target,
+                )
+            }
+ 
+            TableTypes::FunctionCall(fc) => {
+                format!(
+                    "{p}{}  (scope={:?}, target={})",
+                    Self::_format_func_call_inline(fc),
+                    fc.scope,
+                    fc.target
+                )
+            }
+ 
+            TableTypes::Conditional(c) => {
+                let cond = c.condition.iter().map(Self::_format_item_inline).collect::<Vec<_>>().join(" ");
+                let header = format!("{p}if {} {{", cond);
+                let body = Self::_format_table(&c.table, level + 1);
+                format!("{header}\n{body}\n{p}}}")
+            }
+ 
+            TableTypes::Loop(l) => {
+                let cond = l.condition.iter().map(Self::_format_item_inline).collect::<Vec<_>>().join(" ");
+                let header = format!("{p}while {} {{", cond);
+                let body = Self::_format_table(&l.table, level + 1);
+                format!("{header}\n{body}\n{p}}}")
+            }
+ 
+            TableTypes::Return(r) => {
+                let val = r
+                    .value
+                    .as_ref()
+                    .map(|v| Self::_format_values(&v.value))
+                    .unwrap_or_else(|| "<none>".to_string());
+                format!("{p}return {}", val)
+            }
+ 
+            TableTypes::StructLiteral(s) => {
+                let header = format!("{p}struct {} {{", s.name);
+                let mut body = Self::_format_table(&s.arguments, level + 1);
+                if !s.functions.is_empty() {
+                    body.push_str(&format!("\n{p}    -- methods --\n"));
+                    body.push_str(&Self::_format_table(&s.functions, level + 1));
+                }
+                format!("{header}\n{body}\n{p}}}")
+            }
+ 
+            TableTypes::Unknown => {
+                format!("{p}<unknown>")
+            }
+        }
+    }
+ 
+    fn _format_item_inline(item: &TableTypes) -> String {
+        match item {
+            TableTypes::Variable(v) => {
+                if let Some(name) = &v.name && name != "_" {
+                    name.clone()
+                } else {
+                    Self::_format_values(&v.value)
+                }
+            }
+            TableTypes::FunctionCall(fc) => Self::_format_func_call_inline(fc),
+            TableTypes::Reasingment(r) => r.name.clone(),
+            _ => "<expr>".to_string(),
+        }
+    }
+ 
+    fn _format_func_call_inline(fc: &FunctionCall) -> String {
+        let params = fc
+            .parameters
+            .as_ref()
+            .map(|p| p.iter().map(Self::_format_item_inline).collect::<Vec<_>>().join(", "))
+            .unwrap_or_default();
+        format!("{}({})", fc.name, params)
+    }
+ 
+    fn _format_ptr(ptr: &Option<PointerType>) -> &'static str {
+        match ptr {
+            Some(PointerType::Pointer) => "*",
+            Some(PointerType::Reference) => "&",
+            None => "",
+        }
+    }
+ 
+    fn _format_value(value: &Value) -> String {
+        match value {
+            Value::Var(name) => name.clone(),
+            Value::Deref(name) => format!("*{}", name),
+            Value::Ref(name) => format!("&{}", name),
+            Value::Index(name, idx) => format!("{}[{}]", name, idx),
+            Value::FuncCall(fc) => Self::_format_func_call_inline(fc),
+        }
+    }
+ 
+    fn _format_values(values: &Option<Vec<Value>>) -> String {
+        match values {
+            Some(v) if !v.is_empty() => v.iter().map(Self::_format_value).collect::<Vec<_>>().join(" "),
+            _ => "<none>".to_string(),
+        }
+    }
+
+
 }
 
 pub fn analyze_semantically(stack: Vec<Block>, file_str: Vec<String>, file_name: String, debug: bool) -> Result<Vec<TableTypes>, usize>{
@@ -1168,9 +1349,7 @@ pub fn analyze_semantically(stack: Vec<Block>, file_str: Vec<String>, file_name:
     semantic_analyzer.analyze(stack);
 
     if debug {
-        println!("\n---------------------- \n");
-        println!("Semantic analyzer table: {:#?}", semantic_analyzer.table);
-        println!("\n---------------------- \n");
+        semantic_analyzer._print();
     }
     let len = semantic_analyzer.error_messages.len();
     if len > 0 {
