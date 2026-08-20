@@ -9,6 +9,7 @@ struct Flags {
     parser_debug: bool,
     semantic_analyzer_debug: bool,
     tac_debug: bool,
+    simple_debug: bool,
     file_name: String,
 }
 
@@ -16,32 +17,32 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     let Some(flags) = parse_parameters(args) else { return };
 
-    println!("Parsing...");
+    if flags.simple_debug { println!("Parsing..."); }
     let parsed_text = parse_text(&flags.file_name, flags.parser_debug);
     match parsed_text {
         Err(msg) => {println!("{}", msg); return;},
         _ => {}
     }
 
-    println!("Analyzing semanticly...");
+    if flags.simple_debug { println!("Analyzing semanticly..."); }
     let (parsed_text, file_str) = parsed_text.expect("parsing failed");
-    let type_table = analyze_semantically(parsed_text, file_str, flags.semantic_analyzer_debug);
+    let type_table = analyze_semantically(parsed_text, file_str, flags.file_name.clone(), flags.semantic_analyzer_debug);
     match type_table {
         Err(len) => {println!("There {} {} compiler error{}. Please fix the compiler error{} before compiling.", {if len == 1 { "is" } else {"are"}} , len, {if len == 1 { "" } else {"s"}}, {if len == 1 { "" } else {"s"}} ); return;},
         _ => {}
     }
 
-    println!("Translating into a three address code...");
+    if flags.simple_debug { println!("Translating into a three address code..."); }
     let tac = generate_three_address_code(type_table.expect("Compiler errors"), flags.tac_debug);
 
-    println!("Translating into assembly...");
+    if flags.simple_debug { println!("Translating into assembly..."); }
     let asm = generate_assembly(tac);
 
     let asm_path = flags.file_name.replace(".MC", ".asm");
 
 
-    println!("Writing assembly to file...");
-    write_asm(&asm_path, &asm);
+    if flags.simple_debug { println!("Writing assembly to file..."); }
+    write_asm(&asm_path, &asm, flags.simple_debug);
 }
 
 fn parse_parameters(args: Vec<String>) -> Option<Flags> {
@@ -49,14 +50,16 @@ fn parse_parameters(args: Vec<String>) -> Option<Flags> {
         parser_debug: false,
         semantic_analyzer_debug: false,
         tac_debug: false,
+        simple_debug: false,
         file_name: "".to_string(),
     };
 
     for arg in args.iter() {
         match arg.as_str() {
-            "-pd" => flags.parser_debug = true,
-            "-sd" => flags.semantic_analyzer_debug = true,
-            "-td" => flags.tac_debug = true,
+            "-pd" => if !flags.parser_debug {flags.parser_debug = true} else { panic!("-pd tag has been repeated")},
+            "-sd" => if !flags.semantic_analyzer_debug {flags.semantic_analyzer_debug = true} else { panic!("-sd tag has been repeated")},
+            "-td" => if !flags.tac_debug {flags.tac_debug = true} else { panic!("-td tag has been repeated")},
+            "-dd" => if !flags.simple_debug {flags.simple_debug = true} else { panic!("-dd tag has been repeated")},
             _=> { let name = arg.trim_matches('"'); flags.file_name = name.to_string()}
         }
     }

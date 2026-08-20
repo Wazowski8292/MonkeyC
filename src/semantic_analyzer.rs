@@ -11,8 +11,8 @@ struct Entry {
 
 struct Error {
     msg: String,
-    Line: usize,
-    Char: usize,
+    line: usize,
+    char: usize,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -632,8 +632,8 @@ impl SemanticAnalyzer {
                 let error = Error {
                     msg: format!("Too many arguments for function call. Expected: {}, Found: {}", 
                             expected_fc_params, fc_params_len + 1),
-                    Line: word.line.unwrap_or(0), 
-                    Char: word.char_num.unwrap_or(0),
+                    line: word.line.unwrap_or(0), 
+                    char: word.char_num.unwrap_or(0),
                 };
 
                 self.error_messages.push(error); 
@@ -645,8 +645,8 @@ impl SemanticAnalyzer {
         if in_call_or_reasign && token == TokenType::Unknow && index.is_none() {
             let error = Error {
                 msg: format!("Undefined symbol: {}", word.word),
-                Line: word.line.unwrap_or(0), 
-                Char: word.char_num.unwrap_or(0),
+                line: word.line.unwrap_or(0), 
+                char: word.char_num.unwrap_or(0),
             };
 
             self.error_messages.push(error);
@@ -690,8 +690,8 @@ impl SemanticAnalyzer {
             None => {
                 let error = Error {
                     msg: "There wasn't a last entry".to_string(),
-                    Line: word.line.unwrap_or(0), 
-                    Char: word.char_num.unwrap_or(0),
+                    line: word.line.unwrap_or(0), 
+                    char: word.char_num.unwrap_or(0),
 
                 };
                 
@@ -709,8 +709,8 @@ impl SemanticAnalyzer {
             };
             let error = Error {
                 msg: format!("Type mismatch. Expected: {}{}, Found: {}", ptr_type_str, expected.to_str(), found.unwrap_or(TokenType::Unknow).to_str()),
-                Line: word.line.unwrap_or(0), 
-                Char: word.char_num.unwrap_or(0)
+                line: word.line.unwrap_or(0), 
+                char: word.char_num.unwrap_or(0)
 
             };
 
@@ -722,8 +722,8 @@ impl SemanticAnalyzer {
             None => {
                 let error = Error {
                     msg : "There wasn't a last entry".to_string(),
-                    Line: word.line.unwrap_or(0), 
-                    Char: word.char_num.unwrap_or(0),
+                    line: word.line.unwrap_or(0), 
+                    char: word.char_num.unwrap_or(0),
 
                 };
 
@@ -801,8 +801,8 @@ impl SemanticAnalyzer {
                 if actual_type != expected_type {
                     let error = Error {
                         msg: format!("Type mismatch for argument {} of function call: expected {:?}, got {:?}", fc_params_len + 1, expected_type, actual_type),
-                        Line: word.line.unwrap_or(0), 
-                        Char: word.char_num.unwrap_or(0)
+                        line: word.line.unwrap_or(0), 
+                        char: word.char_num.unwrap_or(0)
                     };
 
                     self.error_messages.push(error);
@@ -834,8 +834,8 @@ impl SemanticAnalyzer {
 
                 let error = Error {
                     msg: format!("Pointer kind mismatch for argument {} of function call: expected {}, got {}", fc_params_len + 1, expected_str, actual_str),
-                    Line: word.line.unwrap_or(0), 
-                    Char: word.char_num.unwrap_or(0)
+                    line: word.line.unwrap_or(0), 
+                    char: word.char_num.unwrap_or(0)
                 };
 
                 self.error_messages.push(error);
@@ -923,8 +923,8 @@ impl SemanticAnalyzer {
                 let error = Error {
                     msg: format!( "Type mismatch: variable is '{}' but function '{}' returns '{}'",
                         expected_type.to_str(), word.word, ret_type.to_str()),
-                    Line: word.line.unwrap_or(0),
-                    Char: word.char_num.unwrap_or(0)
+                    line: word.line.unwrap_or(0),
+                    char: word.char_num.unwrap_or(0)
 
 
                 };
@@ -1021,8 +1021,8 @@ impl SemanticAnalyzer {
         } else {
             let error = Error {
                 msg: format!("Undefined symbol: {}", word.word),
-                Line: word.line.unwrap_or(0), 
-                Char: word.char_num.unwrap_or(0)
+                line: word.line.unwrap_or(0), 
+                char: word.char_num.unwrap_or(0)
             };
 
             self.error_messages.push(error);
@@ -1097,17 +1097,17 @@ impl SemanticAnalyzer {
     }
 
 
-    fn print_errors(&self, code: Vec<String>) {
+    fn print_errors(&self, code: Vec<String>, file_name: String) {
     for error in self.error_messages.iter() {
-        println!(
-            "{}; Line:{}, Char pos :{}",
-            error.msg,
-            error.Line.to_string(),
-            error.Char.to_string()
+        println!("\n[Error]: {}", error.msg);
+        println!("--> {} line:{}, char pos :{}",
+            file_name,
+            error.line.to_string(),
+            error.char.to_string()
         );
         println!();
 
-        let error_line = error.Line - 1 as usize; 
+        let error_line = error.line - 1 as usize; 
         let total_lines = code.len();
 
         let mut start = if error_line > 2 { error_line - 2 } else { 1 };
@@ -1125,7 +1125,7 @@ impl SemanticAnalyzer {
             println!("{:>width$} | {}", i + 1, line_content, width = width);
 
             if i == error_line {
-                let (word_start, word_len) = Self::word_span_at(line_content, error.Char as usize);
+                let (word_start, word_len) = Self::word_span_at(line_content, error.char as usize);
                 let gutter_len = width + 3; 
                 let leading_spaces = " ".repeat(gutter_len + word_start.saturating_sub(1));
                 let squiggles = "~".repeat(word_len.max(1));
@@ -1163,7 +1163,7 @@ impl SemanticAnalyzer {
     }
 }
 
-pub fn analyze_semantically(stack: Vec<Block>, file_str: Vec<String>, debug: bool) -> Result<Vec<TableTypes>, usize>{
+pub fn analyze_semantically(stack: Vec<Block>, file_str: Vec<String>, file_name: String, debug: bool) -> Result<Vec<TableTypes>, usize>{
     let mut semantic_analyzer: SemanticAnalyzer = SemanticAnalyzer::new();
     semantic_analyzer.analyze(stack);
 
@@ -1174,7 +1174,7 @@ pub fn analyze_semantically(stack: Vec<Block>, file_str: Vec<String>, debug: boo
     }
     let len = semantic_analyzer.error_messages.len();
     if len > 0 {
-        semantic_analyzer.print_errors(file_str);
+        semantic_analyzer.print_errors(file_str, file_name);
         return Err(len);
     }
 
