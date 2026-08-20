@@ -9,6 +9,12 @@ struct Entry {
     index: Option<(usize, Scope, ResolveType)>,
 }
 
+struct Error {
+    msg: String,
+    Line: usize,
+    Char: usize,
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum TokenType {
     If,
@@ -290,7 +296,7 @@ enum ResolveType {
 
 struct SemanticAnalyzer {
     table: Vec<TableTypes>,
-    error_messages: Vec<String>,
+    error_messages: Vec<Error>,
     set_value: bool,
     set_return_value: bool,
     defining_fn: bool,
@@ -623,15 +629,27 @@ impl SemanticAnalyzer {
 
         if in_function_call || in_nested_call {
             if fc_params_len >= expected_fc_params {
-                self.error_messages.push(format!("Too many arguments for function call. Expected: {}, Found: {}; Line: {}; Char pos: {}", 
-                    expected_fc_params, fc_params_len + 1, word.line.unwrap_or(0), word.char_num.unwrap_or(0)));
+                let error = Error {
+                    msg: format!("Too many arguments for function call. Expected: {}, Found: {}", 
+                            expected_fc_params, fc_params_len + 1),
+                    Line: word.line.unwrap_or(0), 
+                    Char: word.char_num.unwrap_or(0),
+                };
+
+                self.error_messages.push(error); 
             } else {
                 self.check_parameters(entry_info, fc_params_len, fc_target);                
             }
         }
 
         if in_call_or_reasign && token == TokenType::Unknow && index.is_none() {
-            self.error_messages.push(format!("Undefined symbol: {}; Line: {}; Char pos: {}", word.word, word.line.unwrap_or(0), word.char_num.unwrap_or(0)));
+            let error = Error {
+                msg: format!("Undefined symbol: {}", word.word),
+                Line: word.line.unwrap_or(0), 
+                Char: word.char_num.unwrap_or(0),
+            };
+
+            self.error_messages.push(error);
         }
 
         let rhs_ptr_type = self.ptr_type.clone();
@@ -670,7 +688,14 @@ impl SemanticAnalyzer {
                 }
             }
             None => {
-                self.error_messages.push("There wasn't a last entry".to_string());
+                let error = Error {
+                    msg: "There wasn't a last entry".to_string(),
+                    Line: word.line.unwrap_or(0), 
+                    Char: word.char_num.unwrap_or(0),
+
+                };
+                
+                self.error_messages.push(error);
                 return;
             }
             _ => {}
@@ -682,22 +707,27 @@ impl SemanticAnalyzer {
                 Some(PointerType::Reference) => "&",
                 _ => "",
             };
+            let error = Error {
+                msg: format!("Type mismatch. Expected: {}{}, Found: {}", ptr_type_str, expected.to_str(), found.unwrap_or(TokenType::Unknow).to_str()),
+                Line: word.line.unwrap_or(0), 
+                Char: word.char_num.unwrap_or(0)
 
-            self.error_messages.push(format!(
-                "Type mismatch. Expected: {}{}, Found: {}, Line: {}, Char pos: {}",
-                ptr_type_str, expected.to_str(),
-                found.unwrap_or(TokenType::Unknow).to_str(),
-                word.line.unwrap_or(0), 
-                word.char_num.unwrap_or(0)));
+            };
+
+            self.error_messages.push(error);
         }
-
-        let table_snapshot = self.table.clone();
-        let mut extra_errors: Vec<String> = Vec::new();
 
         let new_entry = match self.active_table().last_mut() {
             Some(entry) => entry,
             None => {
-                self.error_messages.push("There wasn't a last entry".to_string());
+                let error = Error {
+                    msg : "There wasn't a last entry".to_string(),
+                    Line: word.line.unwrap_or(0), 
+                    Char: word.char_num.unwrap_or(0),
+
+                };
+
+                self.error_messages.push(error);
                 return;
             },
         };
@@ -712,10 +742,11 @@ impl SemanticAnalyzer {
 
         new_entry.add_arguments(word.word.clone());
         
-        Self::add_caller_info(new_entry, index, word.word.clone(), &table_snapshot, &mut extra_errors, &word);
+        if let Some((idx, expected_type)) = Self::add_caller_info(new_entry, index, &word) {
+            self.check_func_return_type(idx, expected_type, &word);
+        }
+        
         self.add_pointer_info();
-
-        self.error_messages.append(&mut extra_errors);
     }
 
     fn add_pointer_info(&mut self) {
@@ -768,11 +799,13 @@ impl SemanticAnalyzer {
 
             if let Some(actual_type) = actual_type {
                 if actual_type != expected_type {
-                    self.error_messages.push(format!(
-                        "Type mismatch for argument {} of function call: expected {:?}, got {:?}; Line: {}; Char pos: {}",
-                        fc_params_len + 1, expected_type, actual_type,
-                        word.line.unwrap_or(0), word.char_num.unwrap_or(0)
-                    ));
+                    let error = Error {
+                        msg: format!("Type mismatch for argument {} of function call: expected {:?}, got {:?}", fc_params_len + 1, expected_type, actual_type),
+                        Line: word.line.unwrap_or(0), 
+                        Char: word.char_num.unwrap_or(0)
+                    };
+
+                    self.error_messages.push(error);
                 }
             }
 
@@ -798,11 +831,14 @@ impl SemanticAnalyzer {
                     Some(PointerType::Reference) => "address-of (&var)",
                     None => "plain value",
                 };
-                self.error_messages.push(format!(
-                    "Pointer kind mismatch for argument {} of function call: expected {}, got {}; Line: {}; Char pos: {}",
-                    fc_params_len + 1, expected_str, actual_str,
-                    word.line.unwrap_or(0), word.char_num.unwrap_or(0)
-                ));
+
+                let error = Error {
+                    msg: format!("Pointer kind mismatch for argument {} of function call: expected {}, got {}", fc_params_len + 1, expected_str, actual_str),
+                    Line: word.line.unwrap_or(0), 
+                    Char: word.char_num.unwrap_or(0)
+                };
+
+                self.error_messages.push(error);
             }
         }
     }
@@ -837,64 +873,63 @@ impl SemanticAnalyzer {
         }
     }
 
-    fn add_caller_info(new_entry: &mut TableTypes, index: Option<(usize, Scope, ResolveType)>, word: String, 
-        table: &Vec<TableTypes>, error_messages: &mut Vec<String>, call_word: &Word) {
-        
-        let Some((idx, scope, resolve_type)) = index else { return };
+    fn add_caller_info(new_entry: &mut TableTypes, index: Option<(usize, Scope, ResolveType)>, call_word: &Word) -> Option<(usize, TokenType)> {
+        let word = call_word.word.clone();
+        let Some((idx, scope, resolve_type)) = index else { return None };
         let is_func = resolve_type == ResolveType::Function;
 
         match new_entry {
-            TableTypes::FunctionCall(fc) => Self::add_caller_info_on_call(fc, Some((idx, scope, resolve_type)), word),
+            TableTypes::FunctionCall(fc) => {
+                Self::add_caller_info_on_call(fc, Some((idx, scope, resolve_type)), word);
+                None
+            }
             TableTypes::Variable(var) if is_func => {
                 let var_type = var.token_type.clone();
                 Self::promote_pending_var_to_call(var, idx, word, scope);
-                Self::check_func_return_type(error_messages, table, idx, var_type, call_word);
+                Some((idx, var_type))
             }
-
             TableTypes::Reasingment(reasign) if is_func => {
                 let reasign_type = reasign.token_type.clone();
                 if let Some(last) = reasign.parameters.as_mut().and_then(|p| p.last_mut()) {
                     if let TableTypes::Reasingment(_) = last {
                         *last = TableTypes::FunctionCall(FunctionCall {
-                        target: idx,
-                        parameters: None,
-                        name: word,
-                        scope: scope,
+                            target: idx, parameters: None, name: word, scope: scope,
                         });
                     }
                 } else {
                     reasign.parameters.get_or_insert_with(Vec::new).push(
-                    TableTypes::FunctionCall(FunctionCall { target: idx, parameters: None, name: word, scope: scope })
+                        TableTypes::FunctionCall(FunctionCall { target: idx, parameters: None, name: word, scope: scope })
                     );
                 }
-                if reasign_type != TokenType::Unknow {
-                    Self::check_func_return_type(error_messages, table, idx, reasign_type, call_word);
-                }
+                if reasign_type != TokenType::Unknow { Some((idx, reasign_type)) } else { None }
             }
             TableTypes::Return(ret) if is_func => {
                 if let Some(var) = ret.value.as_mut() {
                     Self::promote_pending_var_to_call(var, idx, word, scope);
                 }
+                None
             }
-            _ => {}
+            _ => None,
         }
     }
 
-    fn check_func_return_type(error_messages: &mut Vec<String>, table: &Vec<TableTypes>, func_idx: usize, expected_type: TokenType, word: &Word) {
-        let return_type = table.get(func_idx).and_then(|e| {
+    fn check_func_return_type(&mut self, func_idx: usize, expected_type: TokenType, word: &Word) {
+        let return_type = self.table.get(func_idx).and_then(|e| {
             if let TableTypes::Function(f) = e { f.return_type.clone() } else { None }
         });
 
         if let Some(ret_type) = return_type {
             if ret_type != expected_type {
-                error_messages.push(format!(
-                    "Type mismatch: variable is '{}' but function '{}' returns '{}'; Line: {}; Char pos: {}",
-                    expected_type.to_str(),
-                    word.word,
-                    ret_type.to_str(),
-                    word.line.unwrap_or(0),
-                    word.char_num.unwrap_or(0)
-                ));
+                let error = Error {
+                    msg: format!( "Type mismatch: variable is '{}' but function '{}' returns '{}'",
+                        expected_type.to_str(), word.word, ret_type.to_str()),
+                    Line: word.line.unwrap_or(0),
+                    Char: word.char_num.unwrap_or(0)
+
+
+                };
+
+                self.error_messages.push(error);
             }
         }
     }
@@ -984,7 +1019,13 @@ impl SemanticAnalyzer {
                 self.active_table().push(TableTypes::Reasingment(reasign));
             }
         } else {
-            self.error_messages.push(format!("Undefined symbol: {}; Line: {}:{}", word.word, word.line.unwrap_or(0), word.char_num.unwrap_or(0)));
+            let error = Error {
+                msg: format!("Undefined symbol: {}", word.word),
+                Line: word.line.unwrap_or(0), 
+                Char: word.char_num.unwrap_or(0)
+            };
+
+            self.error_messages.push(error);
         }
     }
 
@@ -1054,9 +1095,75 @@ impl SemanticAnalyzer {
             self.tokenize_word(word);
         }
     }
+
+
+    fn print_errors(&self, code: Vec<String>) {
+    for error in self.error_messages.iter() {
+        println!(
+            "{}; Line:{}, Char pos :{}",
+            error.msg,
+            error.Line.to_string(),
+            error.Char.to_string()
+        );
+        println!();
+
+        let error_line = error.Line - 1 as usize; 
+        let total_lines = code.len();
+
+        let mut start = if error_line > 2 { error_line - 2 } else { 1 };
+        let mut end = start + 4;
+
+        if end > total_lines {
+            end = total_lines;
+            start = if end > 4 { end - 4 } else { 1 };
+        }
+
+        let width = (end + 1).to_string().len();
+
+        for i in start..=end {
+            let line_content = &code[i - 1];
+            println!("{:>width$} | {}", i + 1, line_content, width = width);
+
+            if i == error_line {
+                let (word_start, word_len) = Self::word_span_at(line_content, error.Char as usize);
+                let gutter_len = width + 3; 
+                let leading_spaces = " ".repeat(gutter_len + word_start.saturating_sub(1));
+                let squiggles = "~".repeat(word_len.max(1));
+                println!("{}{}", leading_spaces, squiggles);
+            }
+        }
+        println!();
+    }
 }
 
-pub fn analyze_semantically(stack: Vec<Block>, debug: bool) -> Result<Vec<TableTypes>, usize>{
+    fn word_span_at(line: &str, pos: usize) -> (usize, usize) {
+        let chars: Vec<char> = line.chars().collect();
+        if chars.is_empty() {
+            return (pos, 1);
+        }
+
+        let idx = pos.saturating_sub(1).min(chars.len() - 1);
+        let is_word_char = |c: char| c.is_alphanumeric() || c == '_';
+
+        let mut start = idx;
+        while start > 0 && is_word_char(chars[start - 1]) {
+            start -= 1;
+        }
+
+        let mut end = idx;
+        while end < chars.len() && is_word_char(chars[end]) {
+            end += 1;
+        }
+
+        if end == start {
+            end = start + 1;
+        }
+
+        (start + 1, end - start)
+    }
+}
+
+pub fn analyze_semantically(stack: Vec<Block>, file_str: Vec<String>, debug: bool) -> Result<Vec<TableTypes>, usize>{
     let mut semantic_analyzer: SemanticAnalyzer = SemanticAnalyzer::new();
     semantic_analyzer.analyze(stack);
 
@@ -1067,7 +1174,7 @@ pub fn analyze_semantically(stack: Vec<Block>, debug: bool) -> Result<Vec<TableT
     }
     let len = semantic_analyzer.error_messages.len();
     if len > 0 {
-        println!("Semantic analyzer erros msg: {:#?}", semantic_analyzer.error_messages);
+        semantic_analyzer.print_errors(file_str);
         return Err(len);
     }
 
