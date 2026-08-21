@@ -66,6 +66,7 @@ pub enum TokenType {
 
     WhileLoop,
     
+    Dots,
     Unknow,
 }
 
@@ -113,13 +114,16 @@ impl TokenType {
 
             "while" => TokenType::WhileLoop,
 
+            "::" => TokenType::Dots,
+            
+            "true" | "false" => TokenType::BoolLiteral,
+
             _ if s.parse::<i64>().is_ok() => TokenType::IntegerLiteral,
             _ if (s.ends_with('f') || s.ends_with('F'))
                 && s[..s.len()-1].parse::<f32>().is_ok() => TokenType::FloatLiteral,
             _ if s.parse::<f64>().is_ok() => TokenType::DoubleLiteral,
             _ if s.len() >= 2 && s.starts_with('"') && s.ends_with('"') => TokenType::StringLiteral,
             _ if s.len() >= 3 && s.starts_with('\'') && s.ends_with('\'') => TokenType::CharLiteral,
-            "true" | "false" => TokenType::BoolLiteral,
 
             _ => TokenType::Unknow,
         }
@@ -176,6 +180,7 @@ impl TokenType {
             TokenType::CharLiteral => "<char literal>".to_string(),
             TokenType::BoolLiteral => "<bool literal>".to_string(),
 
+            TokenType::Dots => "->".to_string(),
             TokenType::Unknow => "<unknown>".to_string(),
         }
     }
@@ -303,6 +308,9 @@ struct SemanticAnalyzer {
     defining_parameters: bool,
     max_nesting: usize,
     ptr_type: Option<PointerType>,
+    acces_var: bool,
+    struct_instance_name: Option<String>,
+    current_struct_init: Option<String>,
 }
 
 impl SemanticAnalyzer {
@@ -316,6 +324,9 @@ impl SemanticAnalyzer {
             defining_parameters: false,
             max_nesting: 1,
             ptr_type: None,
+            acces_var: false,
+            struct_instance_name: None,
+            current_struct_init: None,
         }
     }
 
@@ -337,7 +348,6 @@ impl SemanticAnalyzer {
                     let last_is_fn = matches!(self.active_table().last(), Some(TableTypes::Function(_)));
                     self.max_nesting += 1;
 
-                    
                     if last_is_fn && !self.defining_fn {
                         self.defining_fn = true;
                         self.analyze(blocks.to_vec());
@@ -347,6 +357,7 @@ impl SemanticAnalyzer {
                     }
 
                     self.max_nesting -= 1;
+                    self.current_struct_init = None;
                 }
                 Block::Parameter(blocks) => {
                     let prev_defining_fn = self.defining_fn;
@@ -364,11 +375,16 @@ impl SemanticAnalyzer {
         let lookup_name = crate::variable_types::parse_array_syntax(&name)
             .map(|(arr_name, _)| arr_name)
             .unwrap_or(name);
-        if let Some(result) = Self::resolve_in_chain(&lookup_name, &mut self.table, 0, self.max_nesting, self.defining_parameters) {
+        if self.acces_var {
+            if let Some(inst_name) = self.struct_instance_name.clone() {
+                return Self::resolve_in_chain(&inst_name, &mut self.table, 0, self.max_nesting, self.defining_parameters)
+                    .or_else(|| self.resolve_in_parameters(&inst_name));
+            }
+            return None;
+        } else if let Some(result) = Self::resolve_in_chain(&lookup_name, &mut self.table, 0, self.max_nesting, self.defining_parameters) {
             return Some(result);
         } else {
             return self.resolve_in_parameters(&lookup_name);
-            
         }
     }
 
@@ -407,7 +423,7 @@ impl SemanticAnalyzer {
     fn should_descend(table: &Vec<TableTypes>, current_nest_level: usize, max_nesting: usize, defining_parameters: bool) -> bool {
         let has_child = matches!(
             table.last(),
-            Some(TableTypes::Function(_)) | Some(TableTypes::Conditional(_)) | Some(TableTypes::Loop(_))
+            Some(TableTypes::Function(_)) | Some(TableTypes::Conditional(_)) | Some(TableTypes::Loop(_)) | Some(TableTypes::StructLiteral(_))
         );
         if !has_child {
             return false;
@@ -431,12 +447,9 @@ impl SemanticAnalyzer {
                     Self::resolve_in_chain(name, &mut func.table, current_nest_level + 1, max_nesting, defining_parameters)
                 }
             }
-            TableTypes::Conditional(con) => {
-                Self::resolve_in_chain(name, &mut con.table, current_nest_level + 1, max_nesting, defining_parameters)
-            }
-            TableTypes::Loop(while_loop) => {
-                Self::resolve_in_chain(name, &mut while_loop.table, current_nest_level + 1, max_nesting, defining_parameters)
-            }
+            TableTypes::Conditional(con) => Self::resolve_in_chain(name, &mut con.table, current_nest_level + 1, max_nesting, defining_parameters),
+            TableTypes::Loop(while_loop) => Self::resolve_in_chain(name, &mut while_loop.table, current_nest_level + 1, max_nesting, defining_parameters),
+            TableTypes::StructLiteral(struct_def) => Self::resolve_in_chain(name, &mut struct_def.functions, current_nest_level + 1, max_nesting, defining_parameters),
             _ => unreachable!(),
         }
     }
@@ -487,7 +500,9 @@ impl SemanticAnalyzer {
 
     }
 
-    fn desend_table( defining_parameters: bool, defining_fn: bool, last_table: &mut Vec<TableTypes>, current_nest_level: usize, max_nesting: usize) -> &mut Vec<TableTypes> {
+    fn desend_table( defining_parameters: bool, defining_fn: bool, last_table: &mut Vec<TableTypes>, 
+        current_nest_level: usize, max_nesting: usize) -> &mut Vec<TableTypes> {
+        
         if let Some(entry) = last_table.last() {
             if Self::pending_call_in(entry).is_some() {
                 return last_table;
@@ -547,10 +562,102 @@ impl SemanticAnalyzer {
 
         self.set_value |= TokenType::is_operator(token.clone());
 
-        if token == TokenType::Equals {
-            return;
-        } else if token == TokenType::ReturnType {
-            self.set_return_value = true;
+        match token {
+            TokenType::Equals => return,
+            TokenType::ReturnType => {self.set_return_value = true; return;}
+            TokenType::Dots => {
+                let inst_name = self.find_preceding_instance_name();
+                self.struct_instance_name = inst_name;
+                self.acces_var = true;
+                return;
+            }
+            _ => {}
+        }
+
+        if self.acces_var {
+            self.acces_var = false;
+            let field_name = word.word.clone();
+            let inst_name = self.struct_instance_name.take().unwrap_or_default();
+            let mangled = format!("{}__{}", inst_name, field_name);
+
+            let inst_index = Self::resolve_in_chain(
+                &inst_name, &mut self.table, 0, self.max_nesting, self.defining_parameters,
+            ).or_else(|| self.resolve_in_parameters(&inst_name));
+
+            let (target, scope, tok) = if let Some((idx, sc, _)) = inst_index {
+                let active_tbl = &self.table;
+                let tok = match sc {
+                    Scope::Root => active_tbl.get(idx),
+                    Scope::Function | Scope::Parameter => active_tbl.iter().rev().find_map(|t| {
+                        if let TableTypes::Function(f) = t { f.table.get(idx) } else { None }
+                    }),
+                    Scope::EnbedFunc => None,
+                };
+                let tok_type = match tok {
+                    Some(TableTypes::Variable(v)) => v.token_type.clone(),
+                    _ => TokenType::Unknow,
+                };
+                (idx, sc, tok_type)
+            } else {
+                (0, Scope::Root, TokenType::Unknow)
+            };
+
+            if let Some(TableTypes::Reasingment(r)) = self.active_table().last_mut() {
+                if r.parameters.as_ref().map_or(true, |p| p.is_empty()) {
+                    r.name = mangled.clone();
+                    r.target = target;
+                    r.target_scope = scope;
+                    r.token_type = tok.clone();
+                    return;
+                }
+            }
+
+            if matches!(self.active_table().last(), Some(TableTypes::FunctionCall(_))) && self.defining_parameters {
+                if let Some(TableTypes::FunctionCall(fc)) = self.active_table().last_mut() {
+                    if let Some(p) = fc.parameters.as_mut().and_then(|p| p.last_mut()) {
+                        if let TableTypes::Reasingment(inner) = p {
+                            inner.name = mangled.clone();
+                            inner.target = target;
+                            inner.target_scope = scope;
+                            inner.token_type = tok.clone();
+                            return;
+                        }
+                    }
+                }
+            }
+
+            if let Some(TableTypes::Reasingment(r)) = self.active_table().last_mut() {
+                if let Some(p) = r.parameters.as_mut().and_then(|p| p.last_mut()) {
+                    if let TableTypes::Reasingment(inner) = p {
+                        inner.name = mangled.clone();
+                        inner.target = target;
+                        inner.target_scope = scope;
+                        inner.token_type = tok.clone();
+                        return;
+                    }
+                }
+            }
+
+            if let Some(TableTypes::Variable(v)) = self.active_table().last_mut() {
+                if let Some(vals) = v.value.as_mut() {
+                    if let Some(last_val) = vals.last_mut() {
+                        *last_val = Value::Var(mangled.clone());
+                        return;
+                    }
+                }
+            }
+
+            let reasign = Reasingment {
+                target,
+                target_scope: scope,
+                parameters: None,
+                name: mangled,
+                token_type: tok,
+                ptr: self.ptr_type.clone(),
+                array_index: None,
+            };
+            self.active_table().push(TableTypes::Reasingment(reasign));
+            self.set_value = true;
             return;
         }
 
@@ -612,6 +719,95 @@ impl SemanticAnalyzer {
         }
     }
 
+    fn find_preceding_instance_name(&self) -> Option<String> {
+        let active = self.active_table_ref();
+        match active.last() {
+            Some(TableTypes::FunctionCall(fc)) => {
+                if let Some(p) = fc.parameters.as_ref().and_then(|p| p.last()) {
+                    match p {
+                        TableTypes::Reasingment(r) => Some(r.name.clone()),
+                        TableTypes::Variable(v) => v.name.clone(),
+                        _ => None,
+                    }
+                } else {
+                    None
+                }
+            }
+            Some(TableTypes::Reasingment(r)) => {
+                if let Some(p) = r.parameters.as_ref().and_then(|p| p.last()) {
+                    match p {
+                        TableTypes::Reasingment(inner) => Some(inner.name.clone()),
+                        TableTypes::Variable(v) => v.name.clone(),
+                        _ => None,
+                    }
+                } else {
+                    Some(r.name.clone())
+                }
+            }
+            Some(TableTypes::Variable(v)) => {
+                if let Some(vals) = v.value.as_ref().and_then(|v| v.last()) {
+                    if let Value::Var(name) = vals {
+                        Some(name.clone())
+                    } else {
+                        v.name.clone()
+                    }
+                } else {
+                    v.name.clone()
+                }
+            }
+            _ => None,
+        }
+    }
+
+    fn active_table_ref(&self) -> &Vec<TableTypes> {
+        Self::descend_table_ref(self.defining_parameters, self.defining_fn, &self.table, 1, self.max_nesting)
+    }
+
+    fn descend_table_ref<'a>(defining_parameters: bool, defining_fn: bool,
+        last_table: &'a Vec<TableTypes>, current_nest_level: usize, max_nesting: usize) -> &'a Vec<TableTypes> {
+
+        let has_child = matches!(
+            last_table.last(),
+            Some(TableTypes::Function(_)) | Some(TableTypes::Conditional(_)) | Some(TableTypes::Loop(_)) | Some(TableTypes::StructLiteral(_))
+        );
+
+        if !has_child || (current_nest_level == max_nesting) && !defining_parameters {
+            return last_table;
+        }
+
+        if defining_parameters && max_nesting == current_nest_level {
+            if let Some(TableTypes::Conditional(_)) = last_table.last() {
+                return last_table;
+            } else if let Some(TableTypes::Loop(_)) = last_table.last() {
+                return last_table;
+            }
+        }
+
+        match last_table.last().unwrap() {
+            TableTypes::Function(func) => {
+                if defining_parameters && func.table.is_empty() {
+                    func.parameters.as_ref().map(|p| p as &Vec<TableTypes>).unwrap_or(last_table)
+                } else {
+                    Self::descend_table_ref(defining_parameters, defining_fn, &func.table, current_nest_level + 1, max_nesting)
+                }
+            }
+            TableTypes::Conditional(con) => {
+                Self::descend_table_ref(defining_parameters, defining_fn, &con.table, current_nest_level + 1, max_nesting)
+            }
+            TableTypes::Loop(while_loop) => {
+                Self::descend_table_ref(defining_parameters, defining_fn, &while_loop.table, current_nest_level + 1, max_nesting)
+            }
+            TableTypes::StructLiteral(struct_literal) => {
+                if defining_fn {
+                    Self::descend_table_ref(defining_parameters, defining_fn, &struct_literal.functions, current_nest_level + 1, max_nesting)
+                } else {
+                    Self::descend_table_ref(defining_parameters, defining_fn, &struct_literal.arguments, current_nest_level + 1, max_nesting)
+                }
+            }
+            _ => unreachable!(),
+        }
+    }
+
     fn handle_argument(&mut self, entry_info: Entry, in_reasignment: bool, in_function_call: bool, in_nested_call: bool,
         expected_fc_params: usize, fc_params_len: usize, fc_target: usize) {
 
@@ -620,6 +816,24 @@ impl SemanticAnalyzer {
         let index = entry_info.index.clone();
         
         self.set_return_value = false;
+        self.acces_var = false;
+
+        if let Some((_, _, ResolveType::Struct)) = index {
+            let inst_name = match self.active_table().last() {
+                Some(TableTypes::Variable(v)) => v.name.clone(),
+                Some(TableTypes::Reasingment(r)) => Some(r.name.clone()),
+                _ => None,
+            };
+            if let Some(name) = inst_name {
+                self.current_struct_init = Some(name);
+                self.set_value = false;
+                if matches!(self.active_table().last(), Some(TableTypes::Reasingment(_))) {
+                    self.active_table().pop();
+                }
+                return;
+            }
+        }
+
         if token == TokenType::PlusPlus || token == TokenType::MinusMinus {
             self.set_value = false;
         } else {
@@ -811,12 +1025,9 @@ impl SemanticAnalyzer {
 
             let actual_ptr = self.ptr_type.clone();
             let ptr_ok = match (&expected_ptr, &actual_ptr) {
-                // *T param: caller uses &var (reference = address-of)
                 (Some(PointerType::Pointer), Some(PointerType::Reference)) => true,
-                // plain T param: caller uses *ptr (deref) or plain var
                 (None, Some(PointerType::Pointer)) => true,
                 (None, None) => true,
-                // exact match always ok
                 (a, b) => a == b,
             };
 
@@ -1018,6 +1229,25 @@ impl SemanticAnalyzer {
                 };
                 self.active_table().push(TableTypes::Reasingment(reasign));
             }
+        } else if let Some(inst_name) = self.current_struct_init.clone() {
+            let mangled = format!("{}__{}", inst_name, word.word);
+            let inst_index = Self::resolve_in_chain(
+                &inst_name, &mut self.table, 0, self.max_nesting, self.defining_parameters,
+            ).or_else(|| self.resolve_in_parameters(&inst_name));
+
+            let (target, scope) = inst_index.map(|(i, s, _)| (i, s)).unwrap_or((0, Scope::Root));
+
+            let reasign = Reasingment {
+                target,
+                target_scope: scope,
+                parameters: None,
+                name: mangled,
+                token_type: TokenType::Unknow,
+                ptr: self.ptr_type.clone(),
+                array_index: None,
+            };
+            self.active_table().push(TableTypes::Reasingment(reasign));
+            self.set_value = true;
         } else {
             let error = Error {
                 msg: format!("Undefined symbol: {}", word.word),
@@ -1089,16 +1319,26 @@ impl SemanticAnalyzer {
                 normalized_words.push(var_word);
                 normalized_words.push(op_word);
             } else {
+                let parts: Vec<&str> = w.word.split("::").collect();
+                let n = parts.len();
                 let mut char_count = 0;
-                for word in w.word.split(".") {
-                    let tmp_word = Word {
+
+                for (i, word) in parts.iter().enumerate() {
+                    normalized_words.push(Word {
                         word: word.to_string(),
                         line: w.line,
                         char_num: Some(w.char_num.unwrap_or(0) + char_count),
-                    };
-
-                    normalized_words.push(tmp_word);
+                    });
                     char_count += word.len();
+
+                    if i < n - 1 {
+                        normalized_words.push(Word {
+                            word: "::".to_string(),
+                            line: w.line,
+                            char_num: Some(w.char_num.unwrap_or(0) + char_count),
+                        });
+                        char_count += 2;
+                    }
                 }
             }
         }
@@ -1340,8 +1580,6 @@ impl SemanticAnalyzer {
             _ => "<none>".to_string(),
         }
     }
-
-
 }
 
 pub fn analyze_semantically(stack: Vec<Block>, file_str: Vec<String>, file_name: String, debug: bool) -> Result<Vec<TableTypes>, usize>{

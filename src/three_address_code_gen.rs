@@ -1,5 +1,6 @@
 use crate::variable_types::{Variable, Function, Reasingment, FunctionCall, Conditional, Loop, Return, Value, PointerType};
 use crate::semantic_analyzer::{TableTypes, Scope, TokenType};
+use std::collections::HashMap;
 use std::vec::Vec;
 
 #[derive(Debug, Clone)]
@@ -146,6 +147,7 @@ struct ThreeAddressCodeGenerator {
     label_count: usize,
     memory_alloc: usize,
     current_return_type: Option<TokenType>,
+    struct_fields: HashMap<String, Vec<(String, TokenType, Option<Value>)>>,
 }
 
 impl ThreeAddressCodeGenerator {
@@ -156,10 +158,27 @@ impl ThreeAddressCodeGenerator {
             label_count: 0,
             memory_alloc: 0,
             current_return_type: None,
+            struct_fields: HashMap::new(),
         }
     }
 
     pub fn generate(&mut self, type_table: Vec<TableTypes>) {
+        for entry in type_table.iter() {
+            if let TableTypes::StructLiteral(s) = entry {
+                let fields: Vec<(String, TokenType, Option<Value>)> = s.arguments.iter().filter_map(|arg| {
+                    if let TableTypes::Variable(v) = arg {
+                        let name = v.name.clone()?;
+                        let ty = v.token_type.clone();
+                        let default = v.value.as_ref().and_then(|vals| vals.first().cloned());
+                        Some((name, ty, default))
+                    } else {
+                        None
+                    }
+                }).collect();
+                self.struct_fields.insert(s.name.clone(), fields);
+            }
+        }
+
         for entry in type_table.iter() {
             match entry {
                 TableTypes::Variable(var) => self.add_variable(var.clone()),
@@ -410,6 +429,23 @@ impl ThreeAddressCodeGenerator {
     }
  
     fn add_variable(&mut self, variable: Variable) {
+        if let TokenType::StructDef(ref struct_name) = variable.token_type {
+            let instance_name = variable.name.clone().unwrap_or_default();
+            let fields = self.struct_fields.get(struct_name).cloned().unwrap_or_default();
+
+            for (field_name, field_type, field_default) in fields {
+                let mangled = format!("{}__{}", instance_name, field_name);
+                let value_type = Some(field_type.clone());
+                let default_tokens: Vec<Value> = match field_default {
+                    Some(v) => vec![v],
+                    None => vec![Value::Var("0".to_string())],
+                };
+                self.build_expression_chain(default_tokens, mangled, Type::Variable, value_type.clone());
+                self.memory_alloc += 16;
+            }
+            return;
+        }
+
         let last_temp = self.temp_count;
 
         let name;
