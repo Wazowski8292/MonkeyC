@@ -429,69 +429,85 @@ impl ThreeAddressCodeGenerator {
     }
  
     fn add_variable(&mut self, variable: Variable) {
-        if let TokenType::StructDef(ref struct_name) = variable.token_type {
-            let instance_name = variable.name.clone().unwrap_or_default();
-            let fields = self.struct_fields.get(struct_name).cloned().unwrap_or_default();
-
-            for (field_name, field_type, field_default) in fields {
-                let mangled = format!("{}__{}", instance_name, field_name);
-                let value_type = Some(field_type.clone());
-                let default_tokens: Vec<Value> = match field_default {
-                    Some(v) => vec![v],
-                    None => vec![Value::Var("0".to_string())],
-                };
-                self.build_expression_chain(default_tokens, mangled, Type::Variable, value_type.clone());
-                self.memory_alloc += 16;
-            }
-            return;
-        }
-
         let last_temp = self.temp_count;
 
-        let name;
-        if variable.name == Some("_".to_string()) {
-            name = self.next_temp();
-        } else {
-            name = variable.name.clone().unwrap_or_default();
-        }
+        let name = {
+            if variable.name == Some("_".to_string()) {
+                 self.next_temp()
+            } else {
+                variable.name.clone().unwrap_or_default()
+        }};
 
-        let value_type = Some(variable.token_type);
+        let value_type = Some(variable.clone().token_type);
 
         if variable.is_array {
-            let size = variable.array_size.unwrap_or(1);
-            self.tac_table.push(Tac {
-                tac_type: Type::ArrayDecl,
-                arguments: vec![size.to_string()],
-                operator: None,
-                result: Some(name.clone()),
-                value_type: value_type.clone(),
-                is_ptr: false,
-            });
+            self.add_array_type(variable.clone(), name, value_type);
+        } else if let TokenType::StructDef(ref struct_name) = variable.token_type {
+            self.add_struct_type(variable.clone(), struct_name, name);
+        } else {
+            let tokens = variable.value.unwrap_or_default();
+            let tac_type = Type::Variable;
 
-            self.memory_alloc += size * 16;
+            self.build_expression_chain(tokens, name, tac_type, value_type);
 
-            if let Some(tokens) = variable.value {
-                for (idx, token) in tokens.iter().enumerate() {
-                    let (val_str, _) = self.evaluate_value(token, value_type.clone());
-                    self.tac_table.push(Tac {
-                        tac_type: Type::ArrayAssign,
-                        arguments: vec![idx.to_string(), val_str],
-                        operator: None,
-                        result: Some(name.clone()),
-                        value_type: value_type.clone(),
-                        is_ptr: false,
-                    });
-                }
-            }
-            return;
+            self.memory_alloc += (self.temp_count - last_temp + 1) * 16; //TODO: this should depend on the variable and need to remember that before calling a function that it should be a multiple of 16
         }
+    }
 
-        let tokens = variable.value.unwrap_or_default();
-        let tac_type = Type::Variable;
+    fn add_array_type(&mut self, variable: Variable, name: String, value_type: Option<TokenType>) {
+        let size = variable.array_size.unwrap_or(1);
+        self.tac_table.push(Tac {
+            tac_type: Type::ArrayDecl,
+            arguments: vec![size.to_string()],
+            operator: None,
+            result: Some(name.clone()),
+            value_type: value_type.clone(),
+            is_ptr: false,
+        });
 
-        self.build_expression_chain(tokens, name, tac_type, value_type);
+        self.memory_alloc += size * 16;
 
-        self.memory_alloc += (self.temp_count - last_temp + 1) * 16; //TODO: this should depend on the variable and need to remember that before calling a function that it should be a multiple of 16
+        if let Some(tokens) = variable.value {
+            for (idx, token) in tokens.iter().enumerate() {
+                let (val_str, _) = self.evaluate_value(token, value_type.clone());
+                self.tac_table.push(Tac {
+                    tac_type: Type::ArrayAssign,
+                    arguments: vec![idx.to_string(), val_str],
+                    operator: None,
+                    result: Some(name.clone()),
+                    value_type: value_type.clone(),
+                    is_ptr: false,
+                });
+            }
+        }
+    }
+
+    fn add_struct_type(&mut self, variable: Variable, struct_name: &str, name: String) {
+        let fields = self.struct_fields.get(struct_name).cloned().unwrap_or_default();
+        let size = fields.len(); // TODO: Make variables have diferent size
+        self.tac_table.push(Tac {
+            tac_type: Type::ArrayDecl,
+            arguments: vec![size.to_string()],
+            operator: None,
+            result: Some(name.clone()),
+            value_type: Some(variable.token_type.clone()),
+            is_ptr: false,
+        });
+
+        for (idx, (_, field_type, field_default)) in fields.into_iter().enumerate() {
+            if let Some(value) = field_default {
+                let (val_str, _) = self.evaluate_value(&value, Some(field_type.clone()));
+                self.tac_table.push(Tac {
+                    tac_type: Type::ArrayAssign,
+                    arguments: vec![idx.to_string(), val_str],
+                    operator: None,
+                    result: Some(name.clone()),
+                    value_type: Some(field_type.clone()),
+                    is_ptr: false,
+                });
+            }
+        }
+        
     }
  
     fn extract_call_arg(entry: &TableTypes) -> String {
@@ -579,9 +595,9 @@ impl ThreeAddressCodeGenerator {
  
     fn add_reasingment(&mut self, reassignment: Reasingment) {
         let target_ref = Self::symbol_ref(reassignment.target, &reassignment.target_scope);
-        let value_type = Some(reassignment.token_type);
+        let value_type = Some(reassignment.clone().token_type);
 
-        let raw_tokens: Vec<Value> = reassignment.parameters.unwrap_or_default().iter().map(|e| Self::table_type_to_value(e)).collect();
+        let raw_tokens: Vec<Value> = reassignment.clone().parameters.unwrap_or_default().iter().map(|e| Self::table_type_to_value(e)).collect();
 
         let left_op = if let Some(ref idx_str) = reassignment.array_index {
             Value::Index(reassignment.name.clone(), idx_str.clone())
@@ -613,77 +629,87 @@ impl ThreeAddressCodeGenerator {
             raw_tokens
         };
 
-        if let Some(array_idx) = reassignment.array_index {
-            let rhs_val = if tokens.len() == 1 {
-                let (val, _) = self.evaluate_value(&tokens[0], value_type.clone());
-                val
-            } else {
-                let tmp = self.next_temp();
-                self.build_expression_chain(tokens, tmp.clone(), Type::Variable, value_type.clone());
-                tmp
-            };
-
-            self.tac_table.push(Tac {
-                tac_type: Type::ArrayAssign,
-                arguments: vec![array_idx, rhs_val],
-                operator: None,
-                result: Some(reassignment.name),
-                value_type,
-                is_ptr: false,
-            });
+        if let Some(ref array_idx) = reassignment.array_index {
+            self.add_reasing_array(reassignment.clone(), array_idx.to_string(), tokens.clone(), value_type.clone());
             return;
         }
 
         if reassignment.ptr == Some(PointerType::Pointer) {
-            if tokens.len() == 1 {
-                let rhs_val = match &tokens[0] {
-                    Value::Var(s) => s.clone(),
-                    Value::FuncCall(f) => {
-                        let tmp = self.next_temp();
-                        self.add_function_call(f.clone());
-                        self.tac_table.push(Tac {
-                            tac_type: Type::GetReturn,
-                            arguments: vec![],
-                            operator: None,
-                            result: Some(tmp.clone()),
-                            value_type: value_type.clone(),
-                            is_ptr: false,
-                        });
-                        tmp
-                    }
-                    Value::Deref(_) | Value::Ref(_) | Value::Index(_, _) => {
-                        let tmp = self.next_temp();
-                        self.build_expression_chain(tokens, tmp.clone(), Type::Variable, value_type.clone());
-                        tmp
-                    }
-                };
-                self.tac_table.push(Tac {
-                    tac_type: Type::DerefAssign,
-                    arguments: vec![reassignment.name.clone(), rhs_val],
-                    operator: None,
-                    result: Some(reassignment.name),
-                    value_type,
-                    is_ptr: false,
-                });
-            } else {
-                let tmp = self.next_temp();
-                self.build_expression_chain(tokens, tmp.clone(), Type::Variable, value_type.clone());
-                self.tac_table.push(Tac {
-                    tac_type: Type::DerefAssign,
-                    arguments: vec![reassignment.name.clone(), tmp],
-                    operator: None,
-                    result: Some(reassignment.name),
-                    value_type,
-                    is_ptr: false,
-                });
-            }
+            self.add_reasing_ptr(reassignment.clone(), tokens.clone());
             return;
         }
 
         self.build_expression_chain(tokens, target_ref, Type::Reasingment, value_type);
         self.tac_table.last_mut().unwrap().result = Some(reassignment.name);
     }
- 
+    
+    fn add_reasing_array(&mut self, reassignment: Reasingment, array_idx: String, tokens: Vec<Value>, value_type: Option<TokenType>) {
+        let rhs_val = if tokens.len() == 1 {
+            let (val, _) = self.evaluate_value(&tokens[0], value_type.clone());
+            val
+        } else {
+            let tmp = self.next_temp();
+            self.build_expression_chain(tokens, tmp.clone(), Type::Variable, value_type.clone());
+            tmp
+        };
+
+        self.tac_table.push(Tac {
+            tac_type: Type::ArrayAssign,
+            arguments: vec![array_idx, rhs_val],
+            operator: None,
+            result: Some(reassignment.name),
+            value_type,
+            is_ptr: false,
+        });
+    }
+
+    fn add_reasing_ptr(&mut self, reassignment: Reasingment, tokens: Vec<Value>) {
+        let value_type = Some(reassignment.token_type);
+        if tokens.len() == 1 {
+            let rhs_val = match &tokens[0] {
+                Value::Var(s) => s.clone(),
+                Value::FuncCall(f) => {
+                    let tmp = self.next_temp();
+                    self.add_function_call(f.clone());
+                    self.tac_table.push(Tac {
+                        tac_type: Type::GetReturn,
+                        arguments: vec![],
+                        operator: None,
+                        result: Some(tmp.clone()),
+                        value_type: value_type.clone(),
+                        is_ptr: false,
+                    });
+                    tmp
+                }
+                Value::Deref(_) | Value::Ref(_) | Value::Index(_, _) => {
+                    let tmp = self.next_temp();
+                    self.build_expression_chain(tokens, tmp.clone(), Type::Variable, value_type.clone());
+                    tmp
+                }
+            };
+            
+            self.tac_table.push(Tac {
+                tac_type: Type::DerefAssign,
+                arguments: vec![reassignment.name.clone(), rhs_val],
+                operator: None,
+                result: Some(reassignment.name),
+                value_type: value_type.clone(),
+                is_ptr: false,
+            });
+        } else {
+            let tmp = self.next_temp();
+            self.build_expression_chain(tokens, tmp.clone(), Type::Variable, value_type.clone());
+            self.tac_table.push(Tac {
+                tac_type: Type::DerefAssign,
+                arguments: vec![reassignment.name.clone(), tmp],
+                operator: None,
+                result: Some(reassignment.name),
+                value_type: value_type.clone(),
+                is_ptr: false,
+            });
+        }
+    }
+
     fn add_conditional(&mut self, conditional: Conditional) {
         self.add_conditional_block(Type::Conditional, Type::ConditionalEnd, conditional.condition, conditional.table);
     }

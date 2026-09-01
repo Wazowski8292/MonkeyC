@@ -74,9 +74,18 @@ impl Types for Variable {
 
     fn finished_definition(&self) -> bool {
         if self.is_array {
-            if let Some(size) = self.array_size {
-                return self.value.as_ref().map_or(false, |v| v.len() >= size);
-            }
+            return match self.array_size {
+                Some(size) => self
+                    .value
+                    .as_ref()
+                    .and_then(|v| v.first())
+                    .map(|first| match first {
+                        Value::Var(s) => s.split(',').count() >= size,
+                        _ => false,
+                    })
+                    .unwrap_or(false),
+                None => false,
+            };
         }
         self.name.is_some()
     }
