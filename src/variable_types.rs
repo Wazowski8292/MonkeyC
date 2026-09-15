@@ -2,7 +2,6 @@ use crate::semantic_analyzer::{TokenType, TableTypes, Scope};
 
 pub trait Types {
     fn new(token: TokenType) -> Self;
-    fn finished_definition(&self) -> bool;
     fn add_arguments(&mut self, argument: String);
 }
 
@@ -72,24 +71,6 @@ impl Types for Variable {
         }
     }
 
-    fn finished_definition(&self) -> bool {
-        if self.is_array {
-            return match self.array_size {
-                Some(size) => self
-                    .value
-                    .as_ref()
-                    .and_then(|v| v.first())
-                    .map(|first| match first {
-                        Value::Var(s) => s.split(',').count() >= size,
-                        _ => false,
-                    })
-                    .unwrap_or(false),
-                None => false,
-            };
-        }
-        self.name.is_some()
-    }
-
     fn add_arguments(&mut self, argument: String) {
         if self.name.is_none() {
             if let Some((arr_name, size_str)) = parse_array_syntax(&argument) {
@@ -125,10 +106,6 @@ impl Types for Function {
             table: vec![],
             return_type: None,
         }
-    }
-
-    fn finished_definition(&self) -> bool {
-        self.name.is_some()
     }
 
     fn add_arguments(&mut self, argument: String) {
@@ -183,10 +160,6 @@ impl Types for Reasingment {
         }
     }
 
-    fn finished_definition(&self) -> bool {
-        self.parameters.clone().map_or(true, |p| !p.is_empty())
-    }
-
     fn add_arguments(&mut self, argument: String) {
         let table_type = if let Some((arr_name, idx_str)) = parse_array_syntax(&argument) {
             let mut v = Variable::new(TokenType::Unknow);
@@ -222,10 +195,6 @@ impl Types for FunctionCall {
             name: String::new(),
             scope: Scope::Root,
         }
-    }
-
-    fn finished_definition(&self) -> bool {
-        true
     }
 
     fn add_arguments(&mut self, argument: String) {
@@ -264,10 +233,6 @@ impl Types for Conditional {
         }
     }
 
-    fn finished_definition(&self) -> bool {
-        !self.table.is_empty()
-    }
-
     fn add_arguments(&mut self, argument: String) {
         if let Some(TableTypes::Variable(v)) = self.condition.last_mut() {
             v.add_arguments(argument);
@@ -292,10 +257,6 @@ impl Types for Loop {
         }
     }
 
-    fn finished_definition(&self) -> bool {
-        !self.table.is_empty()
-    }
-
     fn add_arguments(&mut self, argument: String) {
         if let Some(TableTypes::Variable(v)) = self.condition.last_mut() {
             v.add_arguments(argument);
@@ -316,10 +277,6 @@ impl Types for Return {
         Self {
             value: Some(var),
         }
-    }
-
-    fn finished_definition(&self) -> bool {
-        false
     }
 
     fn add_arguments(&mut self, argument: String) {
@@ -343,10 +300,6 @@ impl Types for StructLiteral {
             arguments: vec![],
             functions: vec![],
         }
-    }
-
-    fn finished_definition(&self) -> bool {
-        self.name.len() > 0
     }
 
     fn add_arguments(&mut self, argument: String) {

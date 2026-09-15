@@ -564,14 +564,15 @@ impl ThreeAddressCodeGenerator {
         };
  
         for parameter in call.parameters.unwrap_or_default() {
+            /*
             if let TableTypes::Reasingment(ref r) = parameter {
                 if r.ptr == Some(PointerType::Pointer) || r.ptr == Some(PointerType::Reference) {
                     tac.arguments.push(Self::extract_call_arg(&parameter));
                     continue;
                 }
             }
-            let val = Self::table_type_to_value(&parameter);
-            match val {
+
+            match Self::table_type_to_value(&parameter) {
                 Value::Index(arr_name, idx_str) => {
                     let tmp = self.next_temp();
                     self.tac_table.push(Tac {
@@ -588,8 +589,9 @@ impl ThreeAddressCodeGenerator {
                     tac.arguments.push(Self::extract_call_arg(&parameter));
                 }
             }
+            */
         }
- 
+        
         self.tac_table.push(tac);
     }
  

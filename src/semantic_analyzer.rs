@@ -263,20 +263,6 @@ impl TableTypes {
         }
     }
 
-    fn finished_definition(&self) -> bool {
-        match self {
-            TableTypes::Variable(var) => var.finished_definition(),
-            TableTypes::Function(fun) => fun.finished_definition(),
-            TableTypes::Reasingment(asing) => asing.finished_definition(),
-            TableTypes::FunctionCall(fc) => fc.finished_definition(),
-            TableTypes::Conditional(con) => con.finished_definition(),
-            TableTypes::Loop(while_loop) => while_loop.finished_definition(),
-            TableTypes::Return(returns) => returns.finished_definition(),
-            TableTypes::StructLiteral(struct_literal) => struct_literal.finished_definition(),
-            _ => {true},
-        }
-    }
-
     fn add_arguments(&mut self, argument: String) {
         match self {
             TableTypes::Variable(var) => var.add_arguments(argument),
@@ -308,9 +294,8 @@ struct SemanticAnalyzer {
     defining_parameters: bool,
     max_nesting: usize,
     ptr_type: Option<PointerType>,
-    acces_var: bool,
-    struct_instance_name: Option<String>,
     current_struct_init: Option<String>,
+    last_finished: bool,
 }
 
 impl SemanticAnalyzer {
@@ -324,9 +309,8 @@ impl SemanticAnalyzer {
             defining_parameters: false,
             max_nesting: 1,
             ptr_type: None,
-            acces_var: false,
-            struct_instance_name: None,
             current_struct_init: None,
+            last_finished: false,
         }
     }
 
@@ -375,13 +359,7 @@ impl SemanticAnalyzer {
         let lookup_name = crate::variable_types::parse_array_syntax(&name)
             .map(|(arr_name, _)| arr_name)
             .unwrap_or(name);
-        if self.acces_var {
-            if let Some(inst_name) = self.struct_instance_name.clone() {
-                return Self::resolve_in_chain(&inst_name, &mut self.table, 0, self.max_nesting, self.defining_parameters)
-                    .or_else(|| self.resolve_in_parameters(&inst_name));
-            }
-            return None;
-        } else if let Some(result) = Self::resolve_in_chain(&lookup_name, &mut self.table, 0, self.max_nesting, self.defining_parameters) {
+        if let Some(result) = Self::resolve_in_chain(&lookup_name, &mut self.table, 0, self.max_nesting, self.defining_parameters) {
             return Some(result);
         } else {
             return self.resolve_in_parameters(&lookup_name);
@@ -571,101 +549,13 @@ impl SemanticAnalyzer {
                     self.eliminate_instance_placeholder(name);
                 }
                 self.current_struct_init = inst_name;
-                self.set_value = false;
+                //self.set_value = false;
                 return;
             }
             _ => {}
         }
 
-        if self.acces_var {
-            self.acces_var = false;
-            let field_name = word.word.clone();
-            let inst_name = self.struct_instance_name.take().unwrap_or_default();
-            let mangled = format!("{}__{}", inst_name, field_name);
-
-            let inst_index = Self::resolve_in_chain(
-                &inst_name, &mut self.table, 0, self.max_nesting, self.defining_parameters,
-            ).or_else(|| self.resolve_in_parameters(&inst_name));
-
-            let (target, scope, tok) = if let Some((idx, sc, _)) = inst_index {
-                let active_tbl = &self.table;
-                let tok = match sc {
-                    Scope::Root => active_tbl.get(idx),
-                    Scope::Function | Scope::Parameter => active_tbl.iter().rev().find_map(|t| {
-                        if let TableTypes::Function(f) = t { f.table.get(idx) } else { None }
-                    }),
-                    Scope::EnbedFunc => None,
-                };
-                let tok_type = match tok {
-                    Some(TableTypes::Variable(v)) => v.token_type.clone(),
-                    _ => TokenType::Unknow,
-                };
-                (idx, sc, tok_type)
-            } else {
-                (0, Scope::Root, TokenType::Unknow)
-            };
-
-            if let Some(TableTypes::Reasingment(r)) = self.active_table().last_mut() {
-                if r.parameters.as_ref().map_or(true, |p| p.is_empty()) {
-                    r.name = mangled.clone();
-                    r.target = target;
-                    r.target_scope = scope;
-                    r.token_type = tok.clone();
-                    return;
-                }
-            }
-
-            if matches!(self.active_table().last(), Some(TableTypes::FunctionCall(_))) && self.defining_parameters {
-                if let Some(TableTypes::FunctionCall(fc)) = self.active_table().last_mut() {
-                    if let Some(p) = fc.parameters.as_mut().and_then(|p| p.last_mut()) {
-                        if let TableTypes::Reasingment(inner) = p {
-                            inner.name = mangled.clone();
-                            inner.target = target;
-                            inner.target_scope = scope;
-                            inner.token_type = tok.clone();
-                            return;
-                        }
-                    }
-                }
-            }
-
-            if let Some(TableTypes::Reasingment(r)) = self.active_table().last_mut() {
-                if let Some(p) = r.parameters.as_mut().and_then(|p| p.last_mut()) {
-                    if let TableTypes::Reasingment(inner) = p {
-                        inner.name = mangled.clone();
-                        inner.target = target;
-                        inner.target_scope = scope;
-                        inner.token_type = tok.clone();
-                        return;
-                    }
-                }
-            }
-
-            if let Some(TableTypes::Variable(v)) = self.active_table().last_mut() {
-                if let Some(vals) = v.value.as_mut() {
-                    if let Some(last_val) = vals.last_mut() {
-                        *last_val = Value::Var(mangled.clone());
-                        return;
-                    }
-                }
-            }
-
-            let reasign = Reasingment {
-                target,
-                target_scope: scope,
-                parameters: None,
-                name: mangled,
-                token_type: tok,
-                ptr: self.ptr_type.clone(),
-                array_index: None,
-            };
-            self.active_table().push(TableTypes::Reasingment(reasign));
-            self.set_value = true;
-            return;
-        }
-
         let index = self.resolve(word.word.clone());
-        let mut last_finished = self.active_table().last().map_or(true, |e| e.finished_definition());
         
         let mut is_fc = false;
         let mut in_nested_call = false;
@@ -699,26 +589,20 @@ impl SemanticAnalyzer {
             } else if let Some(TableTypes::Function(f)) = self.table.get(fc_target) {
                 expected_fc_params = f.parameters.as_ref().map_or(0, |p| p.len());
             }
-
-            last_finished = false;
         }
 
         let in_reasignment = matches!(self.active_table().last(), Some(TableTypes::Reasingment(_)));
         let in_function_call = matches!(self.active_table().last(), Some(TableTypes::FunctionCall(_))) && self.defining_parameters;
         let in_conditional = matches!(self.active_table().last(), Some(TableTypes::Conditional(_)));
         
-        let in_call = (in_reasignment || in_function_call || in_conditional || in_nested_call) && !last_finished;
+        let in_call = in_reasignment || in_function_call || in_conditional || in_nested_call;
         
         let entry = Entry {
             word: word.clone(),
             token: token,
             index: index,
         };
-
-        eprintln!("word={:?} last_finished={} set_value={} in_call={} current_struct_init={:?}",
-            word.word, last_finished, self.set_value, in_call, self.current_struct_init);
-
-        if !last_finished || self.set_value || self.set_return_value || in_call {
+        if (!self.last_finished || self.set_value || self.set_return_value || in_call) &&  self.current_struct_init.is_none() {
             self.handle_argument(entry, in_reasignment, in_function_call, in_nested_call, expected_fc_params, fc_params_len, fc_target);
         } else {
             self.handle_new_entry(entry);
@@ -726,26 +610,26 @@ impl SemanticAnalyzer {
     }
 
     fn eliminate_instance_placeholder(&mut self, name: &str) {
-        if let Some(TableTypes::FunctionCall(fc)) = self.active_table().last_mut() {
-            if let Some(params) = fc.parameters.as_mut() {
-                if matches!(params.last(), Some(TableTypes::Reasingment(r)) if r.name == name && r.parameters.as_ref().map_or(true, |p| p.is_empty())) {
-                    params.pop();
-                    return;
+        match self.active_table().last_mut() { 
+            Some(TableTypes::FunctionCall(fc)) => {
+                if let Some(params) = fc.parameters.as_mut() {
+                    if matches!(params.last(), Some(TableTypes::Reasingment(r)) if r.name == name && r.parameters.as_ref().map_or(true, |p| p.is_empty())) {
+                        params.pop();
+                        return;
+                    }
                 }
             }
-        }
-        if let Some(TableTypes::Reasingment(outer)) = self.active_table().last_mut() {
-            if let Some(params) = outer.parameters.as_mut() {
-                if matches!(params.last(), Some(TableTypes::Reasingment(r)) if r.name == name && r.parameters.as_ref().map_or(true, |p| p.is_empty())) {
-                    params.pop();
-                    return;
+            Some(TableTypes::Reasingment(reasing)) => {
+                if let Some(params) = reasing.parameters.as_mut() {
+                    if matches!(params.last(), Some(TableTypes::Reasingment(r)) if r.name == name && r.parameters.as_ref().map_or(true, |p| p.is_empty())) {
+                        params.pop();
+                        return;
+                    }
+                } else if reasing.name == name && reasing.parameters.as_ref().map_or(true, |p| p.is_empty()) {
+                    self.active_table().pop();
                 }
             }
-        }
-        if let Some(TableTypes::Reasingment(r)) = self.active_table().last() {
-            if r.name == name && r.parameters.as_ref().map_or(true, |p| p.is_empty()) {
-                self.active_table().pop();
-            }
+            _ => {}
         }
     }
 
@@ -846,7 +730,6 @@ impl SemanticAnalyzer {
         let index = entry_info.index.clone();
         
         self.set_return_value = false;
-        self.acces_var = false;
 
         if token == TokenType::PlusPlus || token == TokenType::MinusMinus {
             self.set_value = false;
@@ -1234,7 +1117,14 @@ impl SemanticAnalyzer {
                 ptr: self.ptr_type.clone(),
                 array_index: relative_idx,
             };
-            self.active_table().push(TableTypes::Reasingment(reasign));
+
+            if let Some(TableTypes::FunctionCall(call)) = self.active_table().last_mut() {
+                if let Some(ref mut params) = call.parameters {
+                    params.push(TableTypes::Reasingment(reasign));
+                }
+            } else {
+                self.active_table().push(TableTypes::Reasingment(reasign));
+            }
             self.set_value = true;
          
         } else if index.is_some() {
@@ -1312,6 +1202,8 @@ impl SemanticAnalyzer {
     }
 
     fn tokenize_line(&mut self, line: &Vec<Word>) {
+        self.last_finished = true;
+        self.set_value = false;
         let mut normalized_words: Vec<Word> = Vec::new();
         let mut i = 0;
         while i < line.len() {
@@ -1379,6 +1271,7 @@ impl SemanticAnalyzer {
 
         for word in normalized_words {
             self.tokenize_word(word);
+            self.last_finished = false;
         }
     }
 
