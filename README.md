@@ -21,14 +21,10 @@ This is the starting point for the Monkey C docs. Pick a page below depending on
 
 During the development of this project AI has been use only to help gather information about kernels, make simple bash scripts, or add simple functions that have been **verifide by me**. Every other single line of code in this repository has been **writen by me** or has been copy and pasted from some amazing blogs that I have found online.
 
----
-
 ## License
 
 This project is licensed under the **MIT License**.
 See the `LICENSE` file for more details.
-
----
 
 ## Contributing
 
