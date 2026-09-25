@@ -6,4 +6,6 @@ Code.asm
 code.asm
 Code
 code
-.vscode
+.vscode/
+.dap-path
+.dap-args
