@@ -449,9 +449,10 @@ impl ThreeAddressCodeGenerator {
             let tac_type = Type::Variable;
 
             self.build_expression_chain(tokens, name, tac_type, value_type);
-
-            self.memory_alloc += (self.temp_count - last_temp + 1) * 16; //TODO: this should depend on the variable and need to remember that before calling a function that it should be a multiple of 16
         }
+
+        self.memory_alloc += (self.temp_count - last_temp + 1) * 16; //TODO: this should depend on the variable and need to remember that before calling a function that it should be a multiple of 16
+
     }
 
     fn add_array_type(&mut self, variable: Variable, name: String, value_type: Option<TokenType>) {
@@ -485,14 +486,19 @@ impl ThreeAddressCodeGenerator {
     fn add_struct_type(&mut self, variable: Variable, struct_name: &str, name: String) {
         let fields = self.struct_fields.get(struct_name).cloned().unwrap_or_default();
         let size = fields.len(); // TODO: Make variables have diferent size
+        
+        self.memory_alloc += size * 16;
+
         self.tac_table.push(Tac {
             tac_type: Type::ArrayDecl,
             arguments: vec![size.to_string()],
             operator: None,
             result: Some(name.clone()),
             value_type: Some(variable.token_type.clone()),
+        
             is_ptr: false,
         });
+
 
         for (idx, (_, field_type, field_default)) in fields.into_iter().enumerate() {
             if let Some(value) = field_default {
@@ -510,25 +516,18 @@ impl ThreeAddressCodeGenerator {
         
     }
  
-    fn extract_call_arg(entry: &TableTypes) -> String {
-        match entry {
-            TableTypes::Reasingment(r) => {
-                let prefix = match &r.ptr {
-                    Some(PointerType::Reference) => "&",
-                    Some(PointerType::Pointer)   => "*",
-                    None => "",
-                };
-                format!("{}{}", prefix, r.name)
-            }
-            _ => Self::extract_operand(entry),
-        }
-    }
-
     fn table_type_to_value(e: &TableTypes) -> Value {
         match e {
             TableTypes::FunctionCall(call) => Value::FuncCall(call.clone()),
             TableTypes::Reasingment(r) if r.ptr == Some(PointerType::Pointer)   => Value::Deref(r.name.clone()),
             TableTypes::Reasingment(r) if r.ptr == Some(PointerType::Reference) => Value::Ref(r.name.clone()),
+            TableTypes::Reasingment(r) => {
+                if let Some(idx) = &r.array_index {
+                    Value::Index(r.name.clone(), idx.clone())
+                } else {
+                    Value::Var(r.name.clone())
+                }
+            }
             TableTypes::Variable(v) => {
                 if let Some(val) = v.value.as_ref().and_then(|v| v.first()) {
                     val.clone()
@@ -562,36 +561,20 @@ impl ThreeAddressCodeGenerator {
             value_type: None,
             is_ptr: false,
         };
- 
-        for parameter in call.parameters.unwrap_or_default() {
-            /*
-            if let TableTypes::Reasingment(ref r) = parameter {
-                if r.ptr == Some(PointerType::Pointer) || r.ptr == Some(PointerType::Reference) {
-                    tac.arguments.push(Self::extract_call_arg(&parameter));
-                    continue;
-                }
-            }
 
-            match Self::table_type_to_value(&parameter) {
-                Value::Index(arr_name, idx_str) => {
-                    let tmp = self.next_temp();
-                    self.tac_table.push(Tac {
-                        tac_type: Type::ArrayIndex,
-                        arguments: vec![arr_name, idx_str],
-                        operator: None,
-                        result: Some(tmp.clone()),
-                        value_type: None,
-                        is_ptr: false,
-                    });
-                    tac.arguments.push(tmp);
-                }
-                _ => {
-                    tac.arguments.push(Self::extract_call_arg(&parameter));
-                }
-            }
-            */
+        for parameter in call.parameters.unwrap_or_default() {
+            let value = Self::table_type_to_value(&parameter);
+
+            let value_type = match &parameter {
+                TableTypes::Variable(var) => Some(var.token_type.clone()),
+                TableTypes::Reasingment(reassignment) => Some(reassignment.token_type.clone()),
+                _ => None,
+            };
+
+            let (arg, _is_ptr) = self.evaluate_value(&value, value_type);
+            tac.arguments.push(arg);
         }
-        
+
         self.tac_table.push(tac);
     }
  
@@ -915,6 +898,7 @@ pub fn generate_three_address_code(type_table: Vec<TableTypes>, debug: bool) -> 
     
     if debug { 
         generator._print(); 
+        println!("{:#?}", generator.tac_table);
     }
     
     generator.tac_table
