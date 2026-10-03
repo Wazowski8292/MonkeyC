@@ -42,7 +42,7 @@ pub fn parse_text(file_path: &String, debug: bool) -> Result<(Vec<Block>, Vec<St
     let mut current_multiple_items: Vec<Vec<Word>> = vec![];
     let mut current_line: Vec<Word> = vec![];
     let mut current_word: Word = Word::new();
-
+    let mut skip_block = false;
     let mut first_char;
 
     for (num, line) in reader.lines().enumerate() {

@@ -2,7 +2,7 @@ FILE ?= "Code.MC"
 
 run:
 	clear
-	cargo run $(FILE)
+	cargo run $(FILE) -sd
 	./Code
 build:
 	clear
@@ -12,6 +12,7 @@ check:
 	cargo check
 debug:
 	cargo build
+	cargo run $(FILE) -dd
 
 clean: 
 	cargo clean

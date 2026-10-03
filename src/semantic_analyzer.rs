@@ -290,7 +290,7 @@ struct SemanticAnalyzer {
     error_messages: Vec<Error>,
     set_value: bool,
     set_return_value: bool,
-    defining_fn: bool,
+    defining_fn: bool, //Todo: Unified this with a struct and add one for defining arrays
     defining_parameters: bool,
     max_nesting: usize,
     ptr_type: Option<PointerType>,
@@ -344,12 +344,12 @@ impl SemanticAnalyzer {
                     self.current_struct_init = None;
                 }
                 Block::Parameter(blocks) => {
-                    let prev_defining_fn = self.defining_fn;
-                    self.defining_fn = true;
+                    //let prev_defining_fn = self.defining_fn;
+                    //self.defining_fn = true;
                     self.defining_parameters = true;
                     self.analyze(blocks.to_vec());
                     self.defining_parameters = false;
-                    self.defining_fn = prev_defining_fn;
+                    //self.defining_fn = prev_defining_fn;
                 }
             }
         }
@@ -1201,9 +1201,16 @@ impl SemanticAnalyzer {
         }
     }
 
-    fn tokenize_line(&mut self, line: &Vec<Word>) {
-        self.last_finished = true;
-        self.set_value = false;
+    fn tokenize_line(&mut self ,line: &Vec<Word>) {
+        if self.set_value || self.set_return_value {
+            self.last_finished = false;
+        } else {
+            if !self.defining_parameters {
+                self.last_finished = true;
+            }
+            self.set_value = false;
+        }
+
         let mut normalized_words: Vec<Word> = Vec::new();
         let mut i = 0;
         while i < line.len() {
