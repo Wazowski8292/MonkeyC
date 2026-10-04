@@ -1,5 +1,5 @@
 use crate::semantic_analyzer::{Scope, TableTypes, TokenType};
-use crate::variable_types::{Conditional, Function, FunctionCall, Loop, PointerType, Reasingment, Return, Value, Variable};
+use crate::variable_types::{Conditional, Function, FunctionCall, Loop, PointerType, Reasingment, Return, Value, Variable, StructLiteral};
 use std::collections::HashMap;
 use std::vec::Vec;
 
@@ -164,22 +164,8 @@ impl ThreeAddressCodeGenerator {
 
     pub fn generate(&mut self, type_table: Vec<TableTypes>) {
         for entry in type_table.iter() {
-            if let TableTypes::StructLiteral(s) = entry {
-                let fields: Vec<(String, TokenType, Option<Value>)> = s
-                    .arguments
-                    .iter()
-                    .filter_map(|arg| {
-                        if let TableTypes::Variable(v) = arg {
-                            let name = v.name.clone()?;
-                            let ty = v.token_type.clone();
-                            let default = v.value.as_ref().and_then(|vals| vals.first().cloned());
-                            Some((name, ty, default))
-                        } else {
-                            None
-                        }
-                    })
-                    .collect();
-                self.struct_fields.insert(s.name.clone(), fields);
+            if let TableTypes::StructLiteral(struct_literal) = entry {
+               self.add_structs(struct_literal.clone()); 
             }
         }
 
@@ -195,6 +181,34 @@ impl ThreeAddressCodeGenerator {
                 _ => {}
             }
         }
+    }
+
+    fn add_structs(&mut self, mut struct_literal: StructLiteral) {
+        let fields: Vec<(String, TokenType, Option<Value>)> = struct_literal
+            .arguments
+            .iter()
+            .filter_map(|arg| {
+                if let TableTypes::Variable(v) = arg {
+                    let name = v.name.clone()?;
+                    let ty = v.token_type.clone();
+                    let default = v.value.as_ref().and_then(|vals| vals.first().cloned());
+                    Some((name, ty, default))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        self.struct_fields.insert(struct_literal.name.clone(), fields);
+        
+        let struct_literal_name = struct_literal.name.clone();
+        for literal in struct_literal.functions.iter_mut() {
+            if let TableTypes::Function(function) = literal {
+                if let Some(name) = function.name.as_mut() {
+                    *name = format!("{}.{}", struct_literal_name, name);
+                }
+            }
+        }
+        self.generate(struct_literal.functions);
     }
 
     fn extract_operand(entry: &TableTypes) -> String {

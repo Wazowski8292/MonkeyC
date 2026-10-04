@@ -1166,9 +1166,11 @@ impl SemanticAnalyzer {
                 Unresolved,
             }
 
+            let mut struct_def_name = String::new();
             let member = match &inst_index {
                 Some((idx, ..)) => match self.table.get(*idx) {
                     Some(TableTypes::StructLiteral(s)) => {
+                        struct_def_name = s.name.clone();
                         if let Some(pos) = s
                             .arguments
                             .iter()
@@ -1206,12 +1208,11 @@ impl SemanticAnalyzer {
                     self.set_value = true;
                 }
                 Member::Method(pos) => {
-                    let mut new_var = Variable::new(TokenType::StructLiteral);
-                    new_var.name = Some(inst_name);
+                    let name = format!("{}.{}", struct_def_name, &word.word.clone());
                     let call = FunctionCall {
                         target: pos, 
-                        parameters: Some(vec![TableTypes::Variable(new_var)]),
-                        name: word.word.clone(),
+                        parameters: None,
+                        name: name,
                         scope: Scope::Function, 
                     };
                     self.push_member_entry(TableTypes::FunctionCall(call));
