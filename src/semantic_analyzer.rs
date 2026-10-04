@@ -385,9 +385,6 @@ impl SemanticAnalyzer {
     fn resolve(&mut self, name: String) -> Option<(usize, Scope, ResolveType)> {
         let lookup_name = crate::variable_types::parse_array_syntax(&name).map(|(arr_name, _)| arr_name).unwrap_or(name);
         
-        //if lookup_name == "self" && matches!(self.table.last(), Some(TableTypes::StructLiteral(_))) {
-        //    return Some((0, Scope::Parameter, ResolveType::Variable));
-        //} else 
         if let Some(result) = Self::resolve_in_chain(&lookup_name, &mut self.table, 0, self.max_nesting, self.defining_parameters) {
             return Some(result);
         } else {
@@ -1199,20 +1196,6 @@ impl SemanticAnalyzer {
         } else if let Some(inst_name) = self.current_struct_init.clone() {
             self.current_struct_init = None;
 
-            /*let is_self = inst_name == "self";
-            let inst_index = if is_self {
-                self.table.iter().rposition(|t| matches!(t, TableTypes::StructLiteral(_))).map(|i| (i, Scope::Parameter, ResolveType::Struct))
-            } else {
-                Self::resolve_in_chain(&inst_name, &mut self.table, 0, self.max_nesting, self.defining_parameters)
-                    .or_else(|| self.resolve_in_parameters(&inst_name))
-            };
-
-            let (target, scope) = if is_self {
-                (0, Scope::Parameter)
-            } else {
-                inst_index.clone().map(|(i, s, _)| (i, s)).unwrap_or((0, Scope::Root))
-            };
-            */
             let inst_index = Self::resolve_in_chain(&inst_name, &mut self.table, 0, self.max_nesting, self.defining_parameters)
                 .or_else(|| self.resolve_in_parameters(&inst_name));
 
@@ -1414,11 +1397,27 @@ impl SemanticAnalyzer {
             }
             self.expand_signs(&mut normalized_words, w);
         }
+        
+        let mut i = 0;
+        while i + 2 < normalized_words.len() {
+            if normalized_words[i].word == "self" && normalized_words[i + 1].word == "::" {
+                if let Some(pos) = self.self_field_index(&normalized_words[i + 2].word) {
+                    normalized_words[i].word = format!("self[{}]", pos);
+                    normalized_words.drain(i + 1..i + 3);
+                }
+            }
+            i += 1;
+        }
 
         for word in normalized_words {
             self.tokenize_word(word);
             self.last_finished = false;
         }
+    }
+
+    fn self_field_index(&self, field: &str) -> Option<usize> {
+        let Some(TableTypes::StructLiteral(s)) = self.table.last() else { return None };
+        s.arguments.iter().position(|a| matches!(a, TableTypes::Variable(v) if v.name.as_deref() == Some(field)))
     }
 
     fn expand_limiters(&self, line: &Vec<Word>, w: &mut Word, counter: &mut usize) -> bool {
