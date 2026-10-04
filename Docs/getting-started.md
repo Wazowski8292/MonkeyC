@@ -38,3 +38,4 @@ If any of these steps fail, check that all three prerequisites are on your `PATH
 - [Language Guide](./language-guide.md) — walks through a small example program.
 - [Token Types](./token-types.md) — reference for every keyword, operator, and literal the language recognizes.
 - [Roadmap](./roadmap.md) — what's implemented, what's planned, and what's further out.
+- [Index](./index.md) - shows a full list of the language features and facilitates moving between docs.

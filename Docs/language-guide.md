@@ -61,4 +61,5 @@ This is a small example, but it touches most of the core pieces you'll use in an
 ## Next Steps
 
 - [Token Types](./token-types.md) — full reference for every keyword, operator, and literal used above and beyond.
-- [Roadmap](./roadmap.md) — language features not shown here yet, like structs and enums.
+- [Roadmap](./roadmap.md) — language features not shown here yet, like enums.
+- [Index](./index.md) - shows a full list of the language features and facilitates moving between docs.
