@@ -1,7 +1,7 @@
 use crate::enbeded_funcs::FUNCTIONS;
 use crate::parser::{Block, Word};
 use crate::variable_types::{
-    Conditional, Function, FunctionCall, Loop, PointerType, Reasingment, Return, StructLiteral, Types, Value, Variable,
+    Conditional, Function, FunctionCall, Loop, PointerType, Reasingment, Return, StructLiteral, Types, Value, Variable, InlineAssembly
 };
 use std::vec::Vec;
 
@@ -68,6 +68,8 @@ pub enum TokenType {
 
     WhileLoop,
 
+    Assembly,
+
     Dots,
     Unknow,
 }
@@ -117,6 +119,8 @@ impl TokenType {
             "while" => TokenType::WhileLoop,
 
             "::" => TokenType::Dots,
+                
+            "asm" => TokenType::Assembly,
 
             "true" | "false" => TokenType::BoolLiteral,
 
@@ -181,7 +185,10 @@ impl TokenType {
             TokenType::CharLiteral => "<char literal>".to_string(),
             TokenType::BoolLiteral => "<bool literal>".to_string(),
 
-            TokenType::Dots => "->".to_string(),
+            TokenType::Dots => "::".to_string(),
+
+            TokenType::Assembly => "asm".to_string(),
+
             TokenType::Unknow => "<unknown>".to_string(),
         }
     }
@@ -262,6 +269,7 @@ pub enum TableTypes {
     Loop(Loop),
     Return(Return),
     StructLiteral(StructLiteral),
+    InlineAssembly(InlineAssembly),
     Unknown,
 }
 
@@ -285,6 +293,7 @@ impl TableTypes {
             | TokenType::String
             | TokenType::StructDef(_) => TableTypes::Variable(Variable::new(token)),
             TokenType::StructLiteral => TableTypes::StructLiteral(StructLiteral::new(token)),
+            TokenType::Assembly => TableTypes::InlineAssembly(InlineAssembly::new(token)),
             _ if TokenType::is_value(token.clone()) && token.clone() != TokenType::Unknow => TableTypes::Variable(Variable::new(token)),
             _ => TableTypes::Unknown,
         }
@@ -340,6 +349,46 @@ impl SemanticAnalyzer {
             last_finished: false,
         }
     }
+    
+    fn push_word(asm: &mut InlineAssembly, word: &str) {
+        match asm.table.last_mut() {
+            Some(last) => {
+                if !last.is_empty() {
+                    last.push(' ');
+                }
+                last.push_str(word);
+            }   
+            None => asm.table.push(word.to_string()),
+        }
+    }
+
+    fn add_inline_asm(asm: &mut InlineAssembly, block: Block) {
+        match block {
+            Block::Word(word) => Self::push_word(asm, &word.word),
+            Block::Line(line) => {
+                asm.table.push(String::new());
+                for word in line {
+                    Self::push_word(asm, &word.word)
+                }
+            }
+            Block::Multiple(multiple) => {
+                asm.table.push(String::new());
+                for line in multiple {
+
+                    asm.table.push(String::new());
+                    for word in line { 
+                        Self::push_word(asm, &word.word);
+                    } 
+                } 
+            }
+            Block::Collection(collection) => { 
+                for block in collection { 
+                    Self::add_inline_asm(asm, block) ;
+                } 
+            }
+            _ => {}
+        }
+    }
 
     pub fn analyze(&mut self, stack: Vec<Block>) {
         for block in stack.iter() {
@@ -356,27 +405,28 @@ impl SemanticAnalyzer {
                     }
                 }
                 Block::Collection(blocks) => {
-                    let last_is_fn = matches!(self.active_table().last(), Some(TableTypes::Function(_)));
-                    self.max_nesting += 1;
-
-                    if last_is_fn && !self.defining_fn {
-                        self.defining_fn = true;
-                        self.analyze(blocks.to_vec());
-                        self.defining_fn = false;
+                    if let  Some(TableTypes::InlineAssembly(asm)) = self.active_table().last_mut() {
+                        for block in blocks { Self::add_inline_asm(asm, block.clone()); }; 
                     } else {
-                        self.analyze(blocks.to_vec());
-                    }
+                        let last_is_fn = matches!(self.active_table().last(), Some(TableTypes::Function(_)));
+                        self.max_nesting += 1;
+    
+                        if last_is_fn && !self.defining_fn {
+                            self.defining_fn = true;
+                            self.analyze(blocks.to_vec());
+                            self.defining_fn = false;
+                        } else {
+                            self.analyze(blocks.to_vec());
+                        }
 
-                    self.max_nesting -= 1;
-                    self.current_struct_init = None;
+                        self.max_nesting -= 1;
+                        self.current_struct_init = None;
+                    }
                 }
                 Block::Parameter(blocks) => {
-                    //let prev_defining_fn = self.defining_fn;
-                    //self.defining_fn = true;
                     self.defining_parameters = true;
                     self.analyze(blocks.to_vec());
                     self.defining_parameters = false;
-                    //self.defining_fn = prev_defining_fn;
                 }
             }
         }
@@ -1673,6 +1723,10 @@ impl SemanticAnalyzer {
                 format!("{header}\n{body}\n{p}}}")
             }
 
+            TableTypes::InlineAssembly(asm) => {
+                format!("asm: {:?}", asm.table)
+            }
+            
             TableTypes::Unknown => {
                 format!("{p}<unknown>")
             }

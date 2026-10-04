@@ -311,3 +311,20 @@ impl Types for StructLiteral {
         self.name = argument;
     }
 }
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct InlineAssembly {
+    pub table: Vec<String>,
+}
+
+impl Types for InlineAssembly {
+
+    fn new(_: TokenType) -> Self {
+        Self {
+            table: vec![],
+        }
+    }
+
+    fn add_arguments(&mut self, _argument: String) {
+    }
+}
