@@ -9,3 +9,4 @@ code
 .vscode/
 .dap-path
 .dap-args
+rustfmt.toml

@@ -6,7 +6,6 @@ This page lists what's planned for Monkey C, split into near-term work and longe
 
 These are the next things planned for the language itself.
 
-- **Struct-related functions** — functions that are tied to a struct, letting you organize behavior alongside the data it operates on.
 - **Inline assembly** - a special block, similar to the `struct` block, and it has the ability to add raw assembly to a project.
 - **Substitute embeded functions** - Rewrite embeded functions so they are writen in actuall Monkey C.
 - **Enums** — an enum is a type made up of a fixed set of named values, useful for representing something that can only be one of a few known states.

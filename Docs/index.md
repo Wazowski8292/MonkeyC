@@ -10,4 +10,6 @@ This page is a flat list of everything in the standard library, so a specific fu
 
 ## Types
 
-Nothing here yet. When a standard library type is added, list it here the same way, with its own doc page and a one-line description, e.g. a future `Vector` type would link to `./vector.md`.
+| Name | Description |
+|---|---|
+| [`structs`](./structs.md) | It bundels variables into one and it can have function assosiated to them. |

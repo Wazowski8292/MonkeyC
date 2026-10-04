@@ -1,17 +1,13 @@
-struct Point {
-	int x = 50;
-	int y = 60;
-}
+struct Test {
+    int x = 5;
+    int y = 6;
 
-fn Num () -> int {
-	return 5;
+    fn add() -> int {
+        return self::x + self::y;
+    }
 }
 
 fn main() {
-	Point p;
-	
-	p::x = 70;
-
-	print_int(p::x);
-	print_int(Num());
+    Test a;
+    print_int(a::add());
 }
