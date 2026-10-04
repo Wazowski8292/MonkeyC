@@ -201,11 +201,22 @@ impl ThreeAddressCodeGenerator {
         self.struct_fields.insert(struct_literal.name.clone(), fields);
         
         let struct_literal_name = struct_literal.name.clone();
+        let struct_literal_length = struct_literal.arguments.len();
+
         for literal in struct_literal.functions.iter_mut() {
             if let TableTypes::Function(function) = literal {
                 if let Some(name) = function.name.as_mut() {
-                    *name = format!("{}.{}", struct_literal_name, name);
+                    *name = format!("{}.{}", struct_literal_name.clone(), name);
                 }
+                let variable = Variable {
+                    token_type: TokenType::StructDef(struct_literal_name.clone()),
+                    value: None,
+                    name: Some("self".to_string()),
+                    ptr: Some(PointerType::Reference),
+                    is_array: true,
+                    array_size: Some(struct_literal_length.clone())
+                };
+                function.parameters.get_or_insert_with(Vec::new).push(TableTypes::Variable(variable));
             }
         }
         self.generate(struct_literal.functions);

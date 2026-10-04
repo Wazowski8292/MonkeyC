@@ -384,6 +384,10 @@ impl SemanticAnalyzer {
 
     fn resolve(&mut self, name: String) -> Option<(usize, Scope, ResolveType)> {
         let lookup_name = crate::variable_types::parse_array_syntax(&name).map(|(arr_name, _)| arr_name).unwrap_or(name);
+        
+        //if lookup_name == "self" && matches!(self.table.last(), Some(TableTypes::StructLiteral(_))) {
+        //    return Some((0, Scope::Parameter, ResolveType::Variable));
+        //} else 
         if let Some(result) = Self::resolve_in_chain(&lookup_name, &mut self.table, 0, self.max_nesting, self.defining_parameters) {
             return Some(result);
         } else {
@@ -675,6 +679,30 @@ impl SemanticAnalyzer {
                     self.active_table().pop();
                 }
             }
+            Some(TableTypes::Variable(v)) => {
+                if let Some(vals) = v.value.as_mut() {
+                    if matches!(vals.last(), Some(Value::Var(n)) if n == name) {
+                        vals.pop();
+                    }
+                }
+            }
+            Some(TableTypes::Return(r)) => {
+                if let Some(vals) = r.value.as_mut().and_then(|v| v.value.as_mut()) {
+                    if matches!(vals.last(), Some(Value::Var(n)) if n == name) {
+                        vals.pop();
+                    }
+                }
+            }
+            Some(TableTypes::Conditional(c)) => {
+                if matches!(c.condition.last(), Some(TableTypes::Reasingment(r)) if r.name == name && r.parameters.as_ref().map_or(true, |p| p.is_empty())) {
+                    c.condition.pop();
+                }
+            }
+            Some(TableTypes::Loop(l)) => {
+                if matches!(l.condition.last(), Some(TableTypes::Reasingment(r)) if r.name == name && r.parameters.as_ref().map_or(true, |p| p.is_empty())) {
+                    l.condition.pop();
+                }
+            }
             _ => {}
         }
     }
@@ -711,6 +739,23 @@ impl SemanticAnalyzer {
                     v.name.clone()
                 }
             }
+            Some(TableTypes::Return(r)) => {
+                let var = r.value.as_ref()?;
+                match var.value.as_ref().and_then(|v| v.last()) {
+                    Some(Value::Var(name)) => Some(name.clone()),
+                    _ => var.name.clone(),
+                }
+            }
+            Some(TableTypes::Conditional(c)) => match c.condition.last() {
+                Some(TableTypes::Reasingment(r)) => Some(r.name.clone()),
+                Some(TableTypes::Variable(v)) => v.name.clone(),
+                _ => None,
+            },
+            Some(TableTypes::Loop(l)) => match l.condition.last() {
+                Some(TableTypes::Reasingment(r)) => Some(r.name.clone()),
+                Some(TableTypes::Variable(v)) => v.name.clone(),
+                _ => None,
+            },
             _ => None,
         }
     }
@@ -1154,11 +1199,25 @@ impl SemanticAnalyzer {
         } else if let Some(inst_name) = self.current_struct_init.clone() {
             self.current_struct_init = None;
 
+            /*let is_self = inst_name == "self";
+            let inst_index = if is_self {
+                self.table.iter().rposition(|t| matches!(t, TableTypes::StructLiteral(_))).map(|i| (i, Scope::Parameter, ResolveType::Struct))
+            } else {
+                Self::resolve_in_chain(&inst_name, &mut self.table, 0, self.max_nesting, self.defining_parameters)
+                    .or_else(|| self.resolve_in_parameters(&inst_name))
+            };
+
+            let (target, scope) = if is_self {
+                (0, Scope::Parameter)
+            } else {
+                inst_index.clone().map(|(i, s, _)| (i, s)).unwrap_or((0, Scope::Root))
+            };
+            */
             let inst_index = Self::resolve_in_chain(&inst_name, &mut self.table, 0, self.max_nesting, self.defining_parameters)
                 .or_else(|| self.resolve_in_parameters(&inst_name));
 
             let (target, scope) = inst_index.clone().map(|(i, s, _)| (i, s)).unwrap_or((0, Scope::Root));
-
+            
             enum Member {
                 Field(usize),
                 Method(usize),
@@ -1205,18 +1264,29 @@ impl SemanticAnalyzer {
                     };
 
                     self.push_member_entry(TableTypes::Reasingment(reasign));
-                    self.set_value = true;
+                    //self.set_value = true;
+                    //self.tokenize_word(Word { word: format!("{}[{}]", inst_name, pos), ..word });
                 }
                 Member::Method(pos) => {
                     let name = format!("{}.{}", struct_def_name, &word.word.clone());
+                    let reasingment = Reasingment {
+                        target: target,
+                        target_scope: scope,
+                        parameters: None,
+                        name: inst_name,
+                        token_type: TokenType::StructDef(struct_def_name.clone()),
+                        ptr: Some(PointerType::Reference),
+                        array_index: None,
+                    };
+
                     let call = FunctionCall {
                         target: pos, 
-                        parameters: None,
+                        parameters: Some(vec![TableTypes::Reasingment(reasingment)]),
                         name: name,
                         scope: Scope::Function, 
                     };
                     self.push_member_entry(TableTypes::FunctionCall(call));
-                    self.set_value = true;
+                   // self.set_value = true;
                 }
                 Member::Missing(struct_name) => {
                     self.error_messages.push(Error {
@@ -1344,8 +1414,6 @@ impl SemanticAnalyzer {
             }
             self.expand_signs(&mut normalized_words, w);
         }
-
-        println!("Line: {:#?}", normalized_words.clone());
 
         for word in normalized_words {
             self.tokenize_word(word);
