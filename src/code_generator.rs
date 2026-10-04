@@ -584,7 +584,7 @@ impl CodeGen {
             _ => panic!("array base must be a memory slot"),
         };
         let val_slot = self.get_or_alloc_slot(val_arg);
-        
+
         self.emit_array_base(array_name, base_offset);
         if index_arg.parse::<i64>().is_ok() {
             self.emit(&format!("    mov rbx, {}", index_arg));
@@ -602,7 +602,7 @@ impl CodeGen {
     fn emit_array_base(&mut self, array_name: &str, base_offset: i32) {
         let op = if self.get_slot_info(array_name).1 { "mov" } else { "lea" };
         self.emit(&format!("    {} rax, [rbp - {}]", op, base_offset));
-    } 
+    }
 
     fn add_get_return(&mut self, get_return: &Tac) {
         let t_offset = match self.get_or_alloc_slot(&get_return.clone().result.unwrap()) {

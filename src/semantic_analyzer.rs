@@ -384,7 +384,7 @@ impl SemanticAnalyzer {
 
     fn resolve(&mut self, name: String) -> Option<(usize, Scope, ResolveType)> {
         let lookup_name = crate::variable_types::parse_array_syntax(&name).map(|(arr_name, _)| arr_name).unwrap_or(name);
-        
+
         if let Some(result) = Self::resolve_in_chain(&lookup_name, &mut self.table, 0, self.max_nesting, self.defining_parameters) {
             return Some(result);
         } else {
@@ -691,12 +691,14 @@ impl SemanticAnalyzer {
                 }
             }
             Some(TableTypes::Conditional(c)) => {
-                if matches!(c.condition.last(), Some(TableTypes::Reasingment(r)) if r.name == name && r.parameters.as_ref().map_or(true, |p| p.is_empty())) {
+                if matches!(c.condition.last(), Some(TableTypes::Reasingment(r)) if r.name == name && r.parameters.as_ref().map_or(true, |p| p.is_empty()))
+                {
                     c.condition.pop();
                 }
             }
             Some(TableTypes::Loop(l)) => {
-                if matches!(l.condition.last(), Some(TableTypes::Reasingment(r)) if r.name == name && r.parameters.as_ref().map_or(true, |p| p.is_empty())) {
+                if matches!(l.condition.last(), Some(TableTypes::Reasingment(r)) if r.name == name && r.parameters.as_ref().map_or(true, |p| p.is_empty()))
+                {
                     l.condition.pop();
                 }
             }
@@ -1200,7 +1202,7 @@ impl SemanticAnalyzer {
                 .or_else(|| self.resolve_in_parameters(&inst_name));
 
             let (target, scope) = inst_index.clone().map(|(i, s, _)| (i, s)).unwrap_or((0, Scope::Root));
-            
+
             enum Member {
                 Field(usize),
                 Method(usize),
@@ -1208,30 +1210,34 @@ impl SemanticAnalyzer {
                 Unresolved,
             }
 
+            let struct_def = if inst_name == "self" {
+                self.table.iter().rev().find(|t| matches!(t, TableTypes::StructLiteral(_)))
+            } else {
+                Self::struct_name_of(&self.table, &inst_name)
+                    .and_then(|n| self.table.iter().find(|t| matches!(t, TableTypes::StructLiteral(s) if s.name == n)))
+            };
+
             let mut struct_def_name = String::new();
-            let member = match &inst_index {
-                Some((idx, ..)) => match self.table.get(*idx) {
-                    Some(TableTypes::StructLiteral(s)) => {
-                        struct_def_name = s.name.clone();
-                        if let Some(pos) = s
-                            .arguments
-                            .iter()
-                            .position(|a| matches!(a, TableTypes::Variable(v) if v.name.as_deref() == Some(word.word.as_str())))
-                        {
-                            Member::Field(pos)
-                        } else if let Some(pos) = s
-                            .functions
-                            .iter()
-                            .position(|f| matches!(f, TableTypes::Function(func) if func.name.as_deref() == Some(word.word.as_str())))
-                        {
-                            Member::Method(pos)
-                        } else {
-                            Member::Missing(s.name.clone())
-                        }
+            let member = match struct_def {
+                Some(TableTypes::StructLiteral(s)) => {
+                    struct_def_name = s.name.clone();
+                    if let Some(pos) = s
+                        .arguments
+                        .iter()
+                        .position(|a| matches!(a, TableTypes::Variable(v) if v.name.as_deref() == Some(word.word.as_str())))
+                    {
+                        Member::Field(pos)
+                    } else if let Some(pos) = s
+                        .functions
+                        .iter()
+                        .position(|f| matches!(f, TableTypes::Function(func) if func.name.as_deref() == Some(word.word.as_str())))
+                    {
+                        Member::Method(pos)
+                    } else {
+                        Member::Missing(s.name.clone())
                     }
-                    _ => Member::Unresolved,
-                },
-                None => Member::Unresolved,
+                }
+                _ => Member::Unresolved,
             };
 
             match member {
@@ -1247,7 +1253,6 @@ impl SemanticAnalyzer {
                     };
 
                     self.push_member_entry(TableTypes::Reasingment(reasign));
-                    //self.set_value = true;
                     //self.tokenize_word(Word { word: format!("{}[{}]", inst_name, pos), ..word });
                 }
                 Member::Method(pos) => {
@@ -1263,13 +1268,13 @@ impl SemanticAnalyzer {
                     };
 
                     let call = FunctionCall {
-                        target: pos, 
+                        target: pos,
                         parameters: Some(vec![TableTypes::Reasingment(reasingment)]),
                         name: name,
-                        scope: Scope::Function, 
+                        scope: Scope::Function,
                     };
                     self.push_member_entry(TableTypes::FunctionCall(call));
-                   // self.set_value = true;
+                    // self.set_value = true;
                 }
                 Member::Missing(struct_name) => {
                     self.error_messages.push(Error {
@@ -1347,6 +1352,22 @@ impl SemanticAnalyzer {
         }
     }
 
+    fn struct_name_of(table: &Vec<TableTypes>, name: &str) -> Option<String> {
+        table.iter().rev().find_map(|entry| match entry {
+            TableTypes::Variable(v) if v.name.as_deref() == Some(name) => match &v.token_type {
+                TokenType::StructDef(s) => Some(s.clone()),
+                _ => None,
+            },
+            TableTypes::Function(f) => {
+                Self::struct_name_of(&f.table, name).or_else(|| f.parameters.as_ref().and_then(|p| Self::struct_name_of(p, name)))
+            }
+            TableTypes::Conditional(c) => Self::struct_name_of(&c.table, name),
+            TableTypes::Loop(l) => Self::struct_name_of(&l.table, name),
+            TableTypes::StructLiteral(s) => Self::struct_name_of(&s.functions, name),
+            _ => None,
+        })
+    }
+
     fn push_member_entry(&mut self, entry: TableTypes) {
         if let Some(TableTypes::FunctionCall(call)) = self.active_table().last_mut() {
             if let Some(ref mut params) = call.parameters {
@@ -1397,7 +1418,7 @@ impl SemanticAnalyzer {
             }
             self.expand_signs(&mut normalized_words, w);
         }
-        
+
         let mut i = 0;
         while i + 2 < normalized_words.len() {
             if normalized_words[i].word == "self" && normalized_words[i + 1].word == "::" {

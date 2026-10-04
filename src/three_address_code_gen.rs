@@ -1,5 +1,5 @@
 use crate::semantic_analyzer::{Scope, TableTypes, TokenType};
-use crate::variable_types::{Conditional, Function, FunctionCall, Loop, PointerType, Reasingment, Return, Value, Variable, StructLiteral};
+use crate::variable_types::{Conditional, Function, FunctionCall, Loop, PointerType, Reasingment, Return, StructLiteral, Value, Variable};
 use std::collections::HashMap;
 use std::vec::Vec;
 
@@ -165,7 +165,7 @@ impl ThreeAddressCodeGenerator {
     pub fn generate(&mut self, type_table: Vec<TableTypes>) {
         for entry in type_table.iter() {
             if let TableTypes::StructLiteral(struct_literal) = entry {
-               self.add_structs(struct_literal.clone()); 
+                self.add_structs(struct_literal.clone());
             }
         }
 
@@ -199,7 +199,7 @@ impl ThreeAddressCodeGenerator {
             })
             .collect();
         self.struct_fields.insert(struct_literal.name.clone(), fields);
-        
+
         let struct_literal_name = struct_literal.name.clone();
         let struct_literal_length = struct_literal.arguments.len();
 
@@ -214,7 +214,7 @@ impl ThreeAddressCodeGenerator {
                     name: Some("self".to_string()),
                     ptr: Some(PointerType::Reference),
                     is_array: true,
-                    array_size: Some(struct_literal_length.clone())
+                    array_size: Some(struct_literal_length.clone()),
                 };
                 function.parameters.get_or_insert_with(Vec::new).push(TableTypes::Variable(variable));
             }
