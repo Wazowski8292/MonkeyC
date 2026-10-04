@@ -16,6 +16,7 @@ These are the next things planned for the language itself.
 
 These are bigger, further-out goals for the language and its standard library.
 
+- **Allocating diferent amounts of memory** - write now every variable uses 8 bytes and the idea is to build a system similar to C with buffers and all of that.
 - **Array length lookup** — a built-in way to ask how many elements an [array](./language-guide.md#arrays) holds, rather than tracking that separately yourself.
 - **Operator sanity checking** — validation that an operator is actually being used on types it makes sense for, e.g. catching an attempt to add a `bool` and a `char`.
 - **Multiple files** - adding the ability to be able to call and use several files in one project easily.

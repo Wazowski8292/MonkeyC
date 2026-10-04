@@ -13,10 +13,10 @@ impl Word {
         Self {
             word: String::default(),
             line: None,
-            char_num: None,   
+            char_num: None,
         }
     }
-    
+
     fn clear(&mut self) {
         self.word.clear();
         self.line = None;
@@ -42,7 +42,7 @@ pub fn parse_text(file_path: &String, debug: bool) -> Result<(Vec<Block>, Vec<St
     let mut current_multiple_items: Vec<Vec<Word>> = vec![];
     let mut current_line: Vec<Word> = vec![];
     let mut current_word: Word = Word::new();
-    let mut skip_block = false;
+    let mut _skip_block = false;
     let mut first_char;
 
     for (num, line) in reader.lines().enumerate() {
@@ -50,16 +50,27 @@ pub fn parse_text(file_path: &String, debug: bool) -> Result<(Vec<Block>, Vec<St
         first_char = false;
         let num = num + 1;
         let mut char_pos = 0;
-        let mut skip = false; 
+        let mut skip = false;
 
         for letters in line_content.chars() {
             char_pos += 1;
 
             match letters {
                 '{' | '(' => {
-                    let error = add_last_block(&mut first_char, &mut current_word, &mut current_line, &mut current_multiple_items, &mut stack, num, char_pos, letters == '(');
+                    let error = add_last_block(
+                        &mut first_char,
+                        &mut current_word,
+                        &mut current_line,
+                        &mut current_multiple_items,
+                        &mut stack,
+                        num,
+                        char_pos,
+                        letters == '(',
+                    );
                     match error {
-                        Err(msg) => {return Err(msg); },
+                        Err(msg) => {
+                            return Err(msg);
+                        }
                         _ => {}
                     }
 
@@ -67,9 +78,20 @@ pub fn parse_text(file_path: &String, debug: bool) -> Result<(Vec<Block>, Vec<St
                     skip = false;
                 }
                 '}' | ')' => {
-                    let error = add_last_block(&mut first_char, &mut current_word, &mut current_line, &mut current_multiple_items, &mut stack, num, char_pos, letters == ')');
+                    let error = add_last_block(
+                        &mut first_char,
+                        &mut current_word,
+                        &mut current_line,
+                        &mut current_multiple_items,
+                        &mut stack,
+                        num,
+                        char_pos,
+                        letters == ')',
+                    );
                     match error {
-                        Err(msg) => {return Err(msg); },
+                        Err(msg) => {
+                            return Err(msg);
+                        }
                         _ => {}
                     }
 
@@ -102,7 +124,7 @@ pub fn parse_text(file_path: &String, debug: bool) -> Result<(Vec<Block>, Vec<St
                     }
                     skip = true;
                 }
-                _ => { 
+                _ => {
                     current_word.word.push(letters);
                     if !current_word.line.is_some() {
                         current_word.line = Some(num);
@@ -115,7 +137,7 @@ pub fn parse_text(file_path: &String, debug: bool) -> Result<(Vec<Block>, Vec<St
                     skip = false;
                 }
             }
-            
+
             file_str.last_mut().map(|v| v.push(letters));
         }
         file_str.push(String::new());
@@ -150,21 +172,22 @@ fn add_last_line(current_line: &mut Vec<Word>, current_multiple_items: &mut Vec<
     }
 }
 
-fn add_last_block(first_char: &mut bool, current_word: &mut Word, current_line: &mut Vec<Word>, 
-    current_multiple_items: &mut Vec<Vec<Word>>, stack: &mut Vec<Vec<Block>>, _line: usize, _chars: usize, _new_line: bool) -> Result<(), String>{
-        
+fn add_last_block(
+    first_char: &mut bool, current_word: &mut Word, current_line: &mut Vec<Word>, current_multiple_items: &mut Vec<Vec<Word>>,
+    stack: &mut Vec<Vec<Block>>, _line: usize, _chars: usize, _new_line: bool,
+) -> Result<(), String> {
     if !current_word.word.is_empty() {
         current_line.push(current_word.clone());
         current_word.clear();
         *first_char = false;
     }
-    
+
     add_last_line(current_line, current_multiple_items, first_char);
-    
-    if !current_multiple_items.is_empty() { 
+
+    if !current_multiple_items.is_empty() {
         stack.last_mut().unwrap().push(Block::Multiple(current_multiple_items.clone()));
         current_multiple_items.clear();
-    }   
+    }
 
     Ok(())
 }

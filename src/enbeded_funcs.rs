@@ -8,8 +8,7 @@ pub const FUNCTIONS: &[PubFuncs] = &[
     PubFuncs {
         name: "print_int",
         parameters: &["int"],
-        function:
-"print_int:
+        function: "print_int:
     push rbp
     mov rbp, rsp
     mov esi, edi
@@ -23,8 +22,7 @@ pub const FUNCTIONS: &[PubFuncs] = &[
     PubFuncs {
         name: "print_float",
         parameters: &["float"],
-        function:
-"print_float:
+        function: "print_float:
     push rbp
     mov rbp, rsp
     cvtss2sd xmm0, xmm0  
@@ -38,8 +36,7 @@ pub const FUNCTIONS: &[PubFuncs] = &[
     PubFuncs {
         name: "print_bool",
         parameters: &["bool"],
-        function:
-"print_bool:
+        function: "print_bool:
     push rbp
     mov rbp, rsp
     lea rsi, [rel str_true]
@@ -56,8 +53,7 @@ pub const FUNCTIONS: &[PubFuncs] = &[
     PubFuncs {
         name: "print_string",
         parameters: &["str"],
-        function:
-"print_string:
+        function: "print_string:
     push rbp
     mov rbp, rsp
     mov rsi, rdi
@@ -71,8 +67,7 @@ pub const FUNCTIONS: &[PubFuncs] = &[
     PubFuncs {
         name: "print_char",
         parameters: &["char"],
-        function:
-"print_char:
+        function: "print_char:
     push rbp
     mov rbp, rsp
     mov esi, edi

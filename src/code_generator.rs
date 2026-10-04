@@ -1,8 +1,8 @@
-use std::vec::Vec;
-use std::collections::HashMap;
-use crate::three_address_code_gen::{Tac, Type, Operator};
-use crate::semantic_analyzer::TokenType;
 use crate::enbeded_funcs::FUNCTIONS;
+use crate::semantic_analyzer::TokenType;
+use crate::three_address_code_gen::{Operator, Tac, Type};
+use std::collections::HashMap;
+use std::vec::Vec;
 
 const ARG_REGS: [&str; 6] = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"];
 const FP_ARG_REGS: [&str; 8] = ["xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5", "xmm6", "xmm7"];
@@ -51,7 +51,7 @@ impl CodeGen {
             param_fp_idx: 0,
         }
     }
-     
+
     pub fn generate(&mut self, tac_table: Vec<Tac>) {
         for (_, tac) in tac_table.iter().enumerate() {
             match tac.tac_type {
@@ -105,32 +105,23 @@ impl CodeGen {
     }
 
     fn tac_is_float(tac: &Tac) -> bool {
-        matches!(
-            tac.value_type,
-            Some(TokenType::Float) | Some(TokenType::FloatLiteral)
-        )
+        matches!(tac.value_type, Some(TokenType::Float) | Some(TokenType::FloatLiteral))
     }
 
     fn tac_is_double(tac: &Tac) -> bool {
-        matches!(
-            tac.value_type,
-            Some(TokenType::Double) | Some(TokenType::DoubleLiteral)
-        )
+        matches!(tac.value_type, Some(TokenType::Double) | Some(TokenType::DoubleLiteral))
     }
 
     fn tac_is_pointer(name: &str) -> bool {
         name.starts_with("*")
     }
-    
+
     fn tac_is_reference(name: &str) -> bool {
         name.starts_with("&")
     }
 
     fn get_slot_info(&self, name: &str) -> (TokenType, bool) {
-        self.slot_map
-            .get(name)
-            .map(|(_, tok, is_ptr)| (tok.clone(), *is_ptr))
-            .unwrap_or_else(|| (TokenType::from_str(name), false))
+        self.slot_map.get(name).map(|(_, tok, is_ptr)| (tok.clone(), *is_ptr)).unwrap_or_else(|| (TokenType::from_str(name), false))
     }
 
     fn is_float_operand(&self, name: &str, tac: Option<&Tac>) -> bool {
@@ -206,11 +197,7 @@ impl CodeGen {
         if token == TokenType::FloatLiteral {
             let label = format!("__flt_{}", self.fp_const_count);
             self.fp_const_count += 1;
-            let val = if name.ends_with('f') || name.ends_with('F') {
-                &name[..name.len()-1]
-            } else {
-                name
-            };
+            let val = if name.ends_with('f') || name.ends_with('F') { &name[..name.len() - 1] } else { name };
             self.rodata.push(format!("    {} dd {}", label, val));
             return Slot::Data(label);
         }
@@ -252,7 +239,7 @@ impl CodeGen {
 
         let a_arg = &variable.arguments[0];
         let (a_tok, a_ptr) = self.get_slot_info(a_arg);
-        
+
         let is_ptr = variable.is_ptr || a_ptr || self.get_slot_info(&name).1;
         let is_f32 = self.is_float_operand(a_arg, Some(variable));
         let is_f64 = self.is_double_operand(a_arg, Some(variable));
@@ -292,7 +279,7 @@ impl CodeGen {
                     self.emit(&format!("    mov rax, {}", a_slot.to_asm_op()));
                     self.emit(&format!("    cmp rax, {}", b_slot.to_asm_op()));
                 }
-                
+
                 let set_inst = match (variable.operator.as_ref().unwrap(), is_fp) {
                     (Operator::LogicalEquals, _) => "sete",
                     (Operator::NotEquals, _) => "setne",
@@ -307,7 +294,6 @@ impl CodeGen {
                 self.emit("    movzx rax, al");
                 self.emit(&format!("    mov [rbp - {}], rax", t_offset));
                 self.emit("");
-                
             }
             Some(op) => {
                 let b_slot = self.get_or_alloc_slot(&variable.arguments[1]);
@@ -776,12 +762,7 @@ pub fn generate_assembly(tac_table: Vec<Tac>) -> Vec<String> {
         out.push("".to_string());
     }
 
-    out.extend(vec![
-        "section .text".to_string(),
-        "    extern printf".to_string(),
-        "    global main".to_string(),
-        String::new(),
-    ]);
+    out.extend(vec!["section .text".to_string(), "    extern printf".to_string(), "    global main".to_string(), String::new()]);
     out.extend(code_gen.enbeded_funcs);
     out.extend(code_gen.file);
     out

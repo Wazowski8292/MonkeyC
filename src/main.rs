@@ -1,9 +1,9 @@
-use std::env;
+use monkey_c::code_generator::generate_assembly;
 use monkey_c::parser::parse_text;
 use monkey_c::semantic_analyzer::analyze_semantically;
 use monkey_c::three_address_code_gen::generate_three_address_code;
-use monkey_c::code_generator::generate_assembly;
 use monkey_c::write_asm::write_asm;
+use std::env;
 
 struct Flags {
     parser_debug: bool,
@@ -19,31 +19,52 @@ fn main() {
 
     let Some(flags) = parse_parameters(args) else { return };
 
-    if flags.simple_debug { println!("Parsing..."); }
+    if flags.simple_debug {
+        println!("Parsing...");
+    }
     let parsed_text = parse_text(&flags.file_name, flags.parser_debug);
     match parsed_text {
-        Err(msg) => {println!("{}", msg); return;},
+        Err(msg) => {
+            println!("{}", msg);
+            return;
+        }
         _ => {}
     }
 
-    if flags.simple_debug { println!("Analyzing semanticly..."); }
+    if flags.simple_debug {
+        println!("Analyzing semanticly...");
+    }
     let (parsed_text, file_str) = parsed_text.expect("parsing failed");
     let type_table = analyze_semantically(parsed_text, file_str, flags.file_name.clone(), flags.semantic_analyzer_debug);
     match type_table {
-        Err(len) => {println!("There {} {} compiler error{}. Please fix the compiler error{} before compiling.", {if len == 1 { "is" } else {"are"}} , len, {if len == 1 { "" } else {"s"}}, {if len == 1 { "" } else {"s"}} ); return;},
+        Err(len) => {
+            println!(
+                "There {} {} compiler error{}. Please fix the compiler error{} before compiling.",
+                { if len == 1 { "is" } else { "are" } },
+                len,
+                { if len == 1 { "" } else { "s" } },
+                { if len == 1 { "" } else { "s" } }
+            );
+            return;
+        }
         _ => {}
     }
 
-    if flags.simple_debug { println!("Translating into a three address code..."); }
+    if flags.simple_debug {
+        println!("Translating into a three address code...");
+    }
     let tac = generate_three_address_code(type_table.expect("Compiler errors"), flags.tac_debug);
 
-    if flags.simple_debug { println!("Translating into assembly..."); }
+    if flags.simple_debug {
+        println!("Translating into assembly...");
+    }
     let asm = generate_assembly(tac);
 
     let asm_path = flags.file_name.replace(".MC", ".asm");
 
-
-    if flags.simple_debug { println!("Writing assembly to file..."); }
+    if flags.simple_debug {
+        println!("Writing assembly to file...");
+    }
     write_asm(&asm_path, &asm, flags.simple_debug);
 }
 
@@ -59,27 +80,66 @@ fn parse_parameters(args: Vec<String>) -> Option<Flags> {
 
     for arg in args.iter().skip(1) {
         match arg.as_str() {
-            "-h" | "--help" => {print_help(); return None},
-            "-pd" => if !flags.parser_debug { flags.parser_debug = true } else { eprintln!("-pd tag has been repeated"); return None },
-            "-sd" => if !flags.semantic_analyzer_debug { flags.semantic_analyzer_debug = true } else { eprintln!("-sd tag has been repeated"); return None },
-            "-td" => if !flags.tac_debug { flags.tac_debug = true } else { eprintln!("-td tag has been repeated"); return None },
-            "-v" => if !flags.simple_debug { flags.simple_debug = true } else { eprintln!("-v tag has been repeated"); return None },
-            "-dd" => if !flags.full_debug { 
-                flags.full_debug = true; 
-                flags.simple_debug = true; 
-                flags.tac_debug = true; 
-                flags.semantic_analyzer_debug = true; 
-                flags.parser_debug = true; 
-            } else { 
-                eprint!("-dd tag has been repeated"); 
-                return None 
-            },
-            
+            "-h" | "--help" => {
+                print_help();
+                return None;
+            }
+            "-pd" => {
+                if !flags.parser_debug {
+                    flags.parser_debug = true
+                } else {
+                    eprintln!("-pd tag has been repeated");
+                    return None;
+                }
+            }
+            "-sd" => {
+                if !flags.semantic_analyzer_debug {
+                    flags.semantic_analyzer_debug = true
+                } else {
+                    eprintln!("-sd tag has been repeated");
+                    return None;
+                }
+            }
+            "-td" => {
+                if !flags.tac_debug {
+                    flags.tac_debug = true
+                } else {
+                    eprintln!("-td tag has been repeated");
+                    return None;
+                }
+            }
+            "-v" => {
+                if !flags.simple_debug {
+                    flags.simple_debug = true
+                } else {
+                    eprintln!("-v tag has been repeated");
+                    return None;
+                }
+            }
+            "-dd" => {
+                if !flags.full_debug {
+                    flags.full_debug = true;
+                    flags.simple_debug = true;
+                    flags.tac_debug = true;
+                    flags.semantic_analyzer_debug = true;
+                    flags.parser_debug = true;
+                } else {
+                    eprint!("-dd tag has been repeated");
+                    return None;
+                }
+            }
+
             _ if arg.ends_with(".MC") => {
                 let name = arg.trim_matches('"');
                 flags.file_name = name.to_string();
             }
-            _ => { eprintln!("[Error]: {} isn't a real flag, if you need help please add the -h or -help flag to see all of the posible flags", arg); return None},
+            _ => {
+                eprintln!(
+                    "[Error]: {} isn't a real flag, if you need help please add the -h or -help flag to see all of the posible flags",
+                    arg
+                );
+                return None;
+            }
         }
     }
 

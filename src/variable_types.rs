@@ -1,4 +1,4 @@
-use crate::semantic_analyzer::{TokenType, TableTypes, Scope};
+use crate::semantic_analyzer::{Scope, TableTypes, TokenType};
 
 pub trait Types {
     fn new(token: TokenType) -> Self;
@@ -113,7 +113,12 @@ impl Types for Function {
             self.name = Some(argument.clone());
         } else {
             let token = TokenType::from_str(&argument);
-            if token == TokenType::Bool || token == TokenType::Char || token == TokenType::String || token == TokenType::Int || token == TokenType::Float {
+            if token == TokenType::Bool
+                || token == TokenType::Char
+                || token == TokenType::String
+                || token == TokenType::Int
+                || token == TokenType::Float
+            {
                 self.return_type = Some(token);
             }
         }
@@ -174,8 +179,8 @@ impl Types for Reasingment {
             }
             table_type
         };
-        
-        self.parameters.get_or_insert_with(Vec::new).push(table_type); 
+
+        self.parameters.get_or_insert_with(Vec::new).push(table_type);
     }
 }
 
@@ -212,7 +217,7 @@ impl Types for FunctionCall {
             table_type
         };
 
-        self.parameters.get_or_insert_with(Vec::new).push(table_type); 
+        self.parameters.get_or_insert_with(Vec::new).push(table_type);
     }
 }
 
@@ -238,7 +243,7 @@ impl Types for Conditional {
             v.add_arguments(argument);
         }
     }
-} 
+}
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Loop {
@@ -262,7 +267,7 @@ impl Types for Loop {
             v.add_arguments(argument);
         }
     }
-} 
+}
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Return {
@@ -284,17 +289,17 @@ impl Types for Return {
             self.value.as_mut().unwrap().add_arguments(argument);
         }
     }
-} 
+}
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct StructLiteral {
     pub name: String,
     pub arguments: Vec<TableTypes>,
-    pub functions: Vec<TableTypes>
+    pub functions: Vec<TableTypes>,
 }
 
 impl Types for StructLiteral {
-    fn new(_ : TokenType) -> Self {
+    fn new(_: TokenType) -> Self {
         Self {
             name: "".to_string(),
             arguments: vec![],
