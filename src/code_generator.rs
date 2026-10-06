@@ -86,6 +86,11 @@ impl CodeGen {
                 Type::GetReturn => self.add_get_return(tac),
                 Type::Return => self.add_return(tac),
                 Type::InlineAssembly => self.add_inline_asm(tac),
+                Type::Jump => {
+                    let label = tac.arguments.get(0).map(String::as_str).unwrap_or("?");
+                    self.emit(&format!("    jmp {}", label));
+                    self.emit("");
+                }
             }
         }
         if !self.current_fn.is_empty() {

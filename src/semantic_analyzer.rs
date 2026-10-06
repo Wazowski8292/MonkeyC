@@ -694,7 +694,7 @@ impl SemanticAnalyzer {
 
         let in_reasignment = matches!(self.active_table().last(), Some(TableTypes::Reasingment(_)));
         let in_function_call = matches!(self.active_table().last(), Some(TableTypes::FunctionCall(_))) && self.defining_parameters;
-        let in_conditional = matches!(self.active_table().last(), Some(TableTypes::Conditional(_)));
+        let in_conditional = matches!(self.active_table().last(), Some(TableTypes::Conditional(_))) && self.defining_parameters;
 
         let in_call = in_reasignment || in_function_call || in_conditional || in_nested_call;
         let in_argument = !self.last_finished || self.set_value || self.set_return_value || in_call;
@@ -1706,8 +1706,17 @@ impl SemanticAnalyzer {
             }
 
             TableTypes::Conditional(c) => {
-                let cond = c.condition.iter().map(Self::_format_item_inline).collect::<Vec<_>>().join(" ");
-                let header = format!("{p}if {} {{", cond);
+                let kw = if c.token_type == TokenType::Else { "else" } else { "if" };
+                let is_plain = match c.condition.first() {
+                    Some(TableTypes::Variable(v)) => v.value.as_ref().map_or(true, |vals| vals.is_empty()),
+                    _ => false,
+                };
+                let header = if is_plain {
+                    format!("{p}{kw} {{")
+                } else {
+                    let cond = c.condition.iter().map(Self::_format_item_inline).collect::<Vec<_>>().join(" ");
+                    format!("{p}{kw} {} {{", cond)
+                };
                 let body = Self::_format_table(&c.table, level + 1);
                 format!("{header}\n{body}\n{p}}}")
             }

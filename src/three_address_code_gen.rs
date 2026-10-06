@@ -132,6 +132,7 @@ pub enum Type {
     GetReturn,
     Return,
     InlineAssembly,
+    Jump,
 }
 
 #[derive(Debug, Clone)]
@@ -172,18 +173,37 @@ impl ThreeAddressCodeGenerator {
             }
         }
 
-        for entry in type_table.iter() {
+        let mut i = 0;
+        while i < type_table.len() {
+            let entry = &type_table[i];
             match entry {
                 TableTypes::Variable(var) => self.add_variable(var.clone()),
                 TableTypes::Function(func) => self.add_function(func.clone()),
                 TableTypes::FunctionCall(call) => self.add_function_call(call.clone()),
                 TableTypes::Reasingment(reassignment) => self.add_reasingment(reassignment.clone()),
-                TableTypes::Conditional(cond) => self.add_conditional(cond.clone()),
+                TableTypes::Conditional(cond) => {
+                    let mut chain: Vec<Conditional> = vec![cond.clone()];
+                    let mut j = i + 1;
+                    while j < type_table.len() {
+                        if let TableTypes::Conditional(next_cond) = &type_table[j] {
+                            if next_cond.token_type == TokenType::Else {
+                                chain.push(next_cond.clone());
+                                j += 1;
+                                continue;
+                            }
+                        }
+                        break;
+                    }
+                    self.add_conditional_chain(chain);
+                    i = j;
+                    continue;
+                }
                 TableTypes::Loop(lp) => self.add_loop(lp.clone()),
                 TableTypes::Return(returns) => self.add_return(returns.clone()),
                 TableTypes::InlineAssembly(asm) => self.add_inline_asm(asm.clone()),
                 _ => {}
             }
+            i += 1;
         }
     }
 
@@ -740,6 +760,81 @@ impl ThreeAddressCodeGenerator {
         self.add_conditional_block(Type::Loop, Type::LoopEnd, loop_node.condition, loop_node.table);
     }
 
+    fn is_plain_else(cond: &Conditional) -> bool {
+        match cond.condition.first() {
+            Some(TableTypes::Variable(v)) => {
+                matches!(v.token_type, crate::semantic_analyzer::TokenType::BoolLiteral)
+                    && v.name.as_deref() == Some("_")
+                    && v.value.as_ref().map_or(true, |vals| vals.is_empty())
+            }
+            _ => false,
+        }
+    }
+
+    fn add_conditional_chain(&mut self, chain: Vec<Conditional>) {
+        if chain.is_empty() {
+            return;
+        }
+
+        if chain.len() == 1 {
+            self.add_conditional(chain.into_iter().next().unwrap());
+            return;
+        }
+
+        let done_label = self.next_label();
+        let mut branch_labels: Vec<String> = (0..chain.len() - 1).map(|_| self.next_label()).collect();
+        branch_labels.push(done_label.clone());
+
+        for (idx, conditional) in chain.into_iter().enumerate() {
+            let is_last = idx == branch_labels.len() - 1;
+            let my_false_label = branch_labels[idx].clone();
+
+            if Self::is_plain_else(&conditional) {
+                self.generate(conditional.table);
+            } else {
+                let mut tac = Tac {
+                    tac_type: Type::Conditional,
+                    result: None,
+                    arguments: vec![my_false_label.clone()],
+                    operator: None,
+                    value_type: None,
+                    is_ptr: false,
+                };
+
+                if let Some(TableTypes::Variable(var)) = conditional.condition.first() {
+                    self.add_variable(var.clone());
+                    self.attach_condition_info(&mut tac);
+                } else if let Some(TableTypes::Reasingment(re)) = conditional.condition.first() {
+                    self.add_reasingment(re.clone());
+                    self.attach_condition_info(&mut tac);
+                }
+
+                self.tac_table.push(tac);
+                self.generate(conditional.table);
+            }
+
+            if !is_last {
+                self.tac_table.push(Tac {
+                    tac_type: Type::Jump,
+                    arguments: vec![done_label.clone()],
+                    operator: None,
+                    result: None,
+                    value_type: None,
+                    is_ptr: false,
+                });
+            }
+
+            self.tac_table.push(Tac {
+                tac_type: Type::ConditionalEnd,
+                arguments: vec![my_false_label],
+                operator: None,
+                result: None,
+                value_type: None,
+                is_ptr: false,
+            });
+        }
+    }
+
     fn add_conditional_block(&mut self, start: Type, end: Type, condition: Vec<TableTypes>, table: Vec<TableTypes>) {
         let label = self.next_label();
 
@@ -920,6 +1015,10 @@ impl ThreeAddressCodeGenerator {
             }
             Type::InlineAssembly => {
                 format!("{pad}asm {:?}", tac.arguments)
+            }
+            Type::Jump => {
+                let label = tac.arguments.get(0).map(String::as_str).unwrap_or("?");
+                format!("{pad}jump {label}")
             }
         }
     }

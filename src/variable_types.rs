@@ -223,16 +223,18 @@ impl Types for FunctionCall {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Conditional {
+    pub token_type: TokenType,
     pub condition: Vec<TableTypes>,
     pub table: Vec<TableTypes>,
 }
 
 impl Types for Conditional {
-    fn new(_: TokenType) -> Self {
+    fn new(token: TokenType) -> Self {
         let mut var = Variable::new(TokenType::BoolLiteral);
         var.name = Some("_".to_string());
 
         Self {
+            token_type: token,
             condition: vec![TableTypes::Variable(var)],
             table: vec![],
         }
