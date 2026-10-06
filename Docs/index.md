@@ -13,3 +13,4 @@ This page is a flat list of everything in the standard library, so a specific fu
 | Name | Description |
 |---|---|
 | [`structs`](./structs.md) | It bundels variables into one and it can have function assosiated to them. |
+| [**Inline assembly**](./inline-assembly.md) | a special block, like `struct`, written as `asm -> size { ... }`, that adds raw assembly to a program and reserves `size` bytes (rounded to the closest power of two). |

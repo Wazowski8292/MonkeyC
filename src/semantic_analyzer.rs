@@ -1,7 +1,7 @@
 use crate::enbeded_funcs::FUNCTIONS;
 use crate::parser::{Block, Word};
 use crate::variable_types::{
-    Conditional, Function, FunctionCall, Loop, PointerType, Reasingment, Return, StructLiteral, Types, Value, Variable, InlineAssembly
+    Conditional, Function, FunctionCall, InlineAssembly, Loop, PointerType, Reasingment, Return, StructLiteral, Types, Value, Variable,
 };
 use std::vec::Vec;
 
@@ -11,6 +11,7 @@ struct Entry {
     index: Option<(usize, Scope, ResolveType)>,
 }
 
+#[derive(Clone)]
 struct Error {
     msg: String,
     line: usize,
@@ -119,7 +120,7 @@ impl TokenType {
             "while" => TokenType::WhileLoop,
 
             "::" => TokenType::Dots,
-                
+
             "asm" => TokenType::Assembly,
 
             "true" | "false" => TokenType::BoolLiteral,
@@ -309,6 +310,7 @@ impl TableTypes {
             TableTypes::Loop(while_loop) => while_loop.add_arguments(argument),
             TableTypes::Return(returns) => returns.add_arguments(argument),
             TableTypes::StructLiteral(struct_literal) => struct_literal.add_arguments(argument),
+            TableTypes::InlineAssembly(asm) => asm.add_arguments(argument),
             _ => {}
         }
     }
@@ -324,6 +326,7 @@ enum ResolveType {
 struct SemanticAnalyzer {
     table: Vec<TableTypes>,
     error_messages: Vec<Error>,
+    warning_messages: Vec<Error>,
     set_value: bool,
     set_return_value: bool,
     defining_fn: bool, //Todo: Unified this with a struct and add one for defining arrays
@@ -339,6 +342,7 @@ impl SemanticAnalyzer {
         Self {
             table: vec![],
             error_messages: vec![],
+            warning_messages: vec![],
             set_value: false,
             set_return_value: false,
             defining_fn: false,
@@ -349,7 +353,7 @@ impl SemanticAnalyzer {
             last_finished: false,
         }
     }
-    
+
     fn push_word(asm: &mut InlineAssembly, word: &str) {
         match asm.table.last_mut() {
             Some(last) => {
@@ -357,7 +361,7 @@ impl SemanticAnalyzer {
                     last.push(' ');
                 }
                 last.push_str(word);
-            }   
+            }
             None => asm.table.push(word.to_string()),
         }
     }
@@ -372,19 +376,17 @@ impl SemanticAnalyzer {
                 }
             }
             Block::Multiple(multiple) => {
-                asm.table.push(String::new());
                 for line in multiple {
-
                     asm.table.push(String::new());
-                    for word in line { 
+                    for word in line {
                         Self::push_word(asm, &word.word);
-                    } 
-                } 
+                    }
+                }
             }
-            Block::Collection(collection) => { 
-                for block in collection { 
-                    Self::add_inline_asm(asm, block) ;
-                } 
+            Block::Collection(collection) => {
+                for block in collection {
+                    Self::add_inline_asm(asm, block);
+                }
             }
             _ => {}
         }
@@ -405,12 +407,14 @@ impl SemanticAnalyzer {
                     }
                 }
                 Block::Collection(blocks) => {
-                    if let  Some(TableTypes::InlineAssembly(asm)) = self.active_table().last_mut() {
-                        for block in blocks { Self::add_inline_asm(asm, block.clone()); }; 
+                    if let Some(TableTypes::InlineAssembly(asm)) = self.active_table().last_mut() {
+                        for block in blocks {
+                            Self::add_inline_asm(asm, block.clone());
+                        }
                     } else {
                         let last_is_fn = matches!(self.active_table().last(), Some(TableTypes::Function(_)));
                         self.max_nesting += 1;
-    
+
                         if last_is_fn && !self.defining_fn {
                             self.defining_fn = true;
                             self.analyze(blocks.to_vec());
@@ -644,8 +648,10 @@ impl SemanticAnalyzer {
                     self.eliminate_instance_placeholder(name);
                 }
                 self.current_struct_init = inst_name;
-                //self.set_value = false;
                 return;
+            }
+            TokenType::Assembly => {
+                self.warning_messages.push( Error { msg: "The Monkey C compiler does not verify asmembly, you must check it by your self and remeber that the asmbler will return an error if it is the case, but it will not go through this compiler".to_string(), line: word.line.unwrap_or(0).clone(), char: word.char_num.unwrap_or(0).clone() } )
             }
             _ => {}
         }
@@ -1578,37 +1584,42 @@ impl SemanticAnalyzer {
         }
     }
 
-    fn print_errors(&self, code: Vec<String>, file_name: String) {
+    fn general_info_print(&self, code: Vec<String>, word: Error) {
+        let error_line = (word.line - 1) as usize;
+        let total_lines = code.len();
+
+        let mut start = if error_line > 2 { error_line - 2 } else { 1 };
+        let mut end = start + 4;
+
+        if end > total_lines {
+            end = total_lines;
+            start = if end > 4 { end - 4 } else { 1 };
+        }
+
+        let width = (end + 1).to_string().len();
+
+        for i in start..=end {
+            let line_content = &code[i - 1];
+            println!("{:>width$} | {}", i + 1, line_content, width = width);
+
+            if i == error_line {
+                let (word_start, word_len) = Self::word_span_at(line_content, word.char as usize);
+                let gutter_len = width + 3;
+                let leading_spaces = " ".repeat(gutter_len + word_start.saturating_sub(1));
+                let squiggles = "~".repeat(word_len.max(1));
+                println!("{}{}", leading_spaces, squiggles);
+            }
+        }
+    }
+
+    fn print_errors(&self, code: Vec<String>, file_name: String, error_type: String) {
         for error in self.error_messages.iter() {
-            println!("\n[Error]: {}", error.msg);
+            println!("\n[{}]: {}", error_type, error.msg);
             println!("--> {} line:{}, char pos :{}", file_name, error.line.to_string(), error.char.to_string());
             println!();
 
-            let error_line = error.line - 1 as usize;
-            let total_lines = code.len();
+            self.general_info_print(code.clone(), error.clone());
 
-            let mut start = if error_line > 2 { error_line - 2 } else { 1 };
-            let mut end = start + 4;
-
-            if end > total_lines {
-                end = total_lines;
-                start = if end > 4 { end - 4 } else { 1 };
-            }
-
-            let width = (end + 1).to_string().len();
-
-            for i in start..=end {
-                let line_content = &code[i - 1];
-                println!("{:>width$} | {}", i + 1, line_content, width = width);
-
-                if i == error_line {
-                    let (word_start, word_len) = Self::word_span_at(line_content, error.char as usize);
-                    let gutter_len = width + 3;
-                    let leading_spaces = " ".repeat(gutter_len + word_start.saturating_sub(1));
-                    let squiggles = "~".repeat(word_len.max(1));
-                    println!("{}{}", leading_spaces, squiggles);
-                }
-            }
             println!();
         }
     }
@@ -1726,7 +1737,7 @@ impl SemanticAnalyzer {
             TableTypes::InlineAssembly(asm) => {
                 format!("asm: {:?}", asm.table)
             }
-            
+
             TableTypes::Unknown => {
                 format!("{p}<unknown>")
             }
@@ -1788,11 +1799,17 @@ pub fn analyze_semantically(stack: Vec<Block>, file_str: Vec<String>, file_name:
 
     if debug {
         semantic_analyzer._print();
-        println!("{:#?}", semantic_analyzer.table);
+        //println!("{:#?}", semantic_analyzer.table);
     }
+
+    let len = semantic_analyzer.warning_messages.len();
+    if len > 0 {
+        semantic_analyzer.print_errors(file_str.clone(), file_name.clone(), "Warning".to_string());
+    }
+
     let len = semantic_analyzer.error_messages.len();
     if len > 0 {
-        semantic_analyzer.print_errors(file_str, file_name);
+        semantic_analyzer.print_errors(file_str, file_name, "Error".to_string());
         return Err(len);
     }
 

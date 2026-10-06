@@ -85,6 +85,7 @@ impl CodeGen {
                 Type::Label => self.emit_label(&tac.arguments[0]),
                 Type::GetReturn => self.add_get_return(tac),
                 Type::Return => self.add_return(tac),
+                Type::InlineAssembly => self.add_inline_asm(tac),
             }
         }
         if !self.current_fn.is_empty() {
@@ -648,6 +649,12 @@ impl CodeGen {
             self.add_exit_syscall();
         } else {
             self.add_epilogue();
+        }
+    }
+
+    fn add_inline_asm(&mut self, tac: &Tac) {
+        for line in tac.arguments.iter() {
+            self.emit(&format!("    {}", line));
         }
     }
 
