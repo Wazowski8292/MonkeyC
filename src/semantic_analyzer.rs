@@ -5,6 +5,11 @@ use crate::variable_types::{
 };
 use std::vec::Vec;
 
+#[derive(PartialEq)]
+enum Modifiers {
+    InForLoop,
+}
+
 struct Entry {
     word: Word,
     token: TokenType,
@@ -71,6 +76,9 @@ pub enum TokenType {
 
     Assembly,
 
+    ForLoop,
+    DoWhileLoop,
+
     Dots,
     Unknow,
 }
@@ -118,6 +126,8 @@ impl TokenType {
             "struct" => TokenType::StructLiteral,
 
             "while" => TokenType::WhileLoop,
+            "for" => TokenType::ForLoop,
+            "do" => TokenType::DoWhileLoop,
 
             "::" => TokenType::Dots,
 
@@ -178,6 +188,8 @@ impl TokenType {
             TokenType::StructDef(name) => format!("struct type of {}", name.clone()),
 
             TokenType::WhileLoop => "while".to_string(),
+            TokenType::ForLoop => "for".to_string(),
+            TokenType::DoWhileLoop => "do".to_string(),
 
             TokenType::IntegerLiteral => "<integer literal>".to_string(),
             TokenType::FloatLiteral => "<float literal>".to_string(),
@@ -284,7 +296,7 @@ impl TableTypes {
             TokenType::FnLiteral => TableTypes::Function(Function::new(token)),
             TokenType::Return => TableTypes::Return(Return::new(token)),
             TokenType::If | TokenType::Else => TableTypes::Conditional(Conditional::new(token)),
-            TokenType::WhileLoop => TableTypes::Loop(Loop::new(token)),
+            TokenType::WhileLoop | TokenType::ForLoop | TokenType::DoWhileLoop => TableTypes::Loop(Loop::new(token)),
             TokenType::Unknow => TableTypes::Reasingment(Reasingment::new(TokenType::Unknow)),
             TokenType::Int
             | TokenType::Float
@@ -329,8 +341,9 @@ struct SemanticAnalyzer {
     warning_messages: Vec<Error>,
     set_value: bool,
     set_return_value: bool,
-    defining_fn: bool, //Todo: Unified this with a struct and add one for defining arrays
+    defining_fn: bool,
     defining_parameters: bool,
+    modifiers: Vec<Modifiers>,
     max_nesting: usize,
     ptr_type: Option<PointerType>,
     current_struct_init: Option<String>,
@@ -347,6 +360,7 @@ impl SemanticAnalyzer {
             set_return_value: false,
             defining_fn: false,
             defining_parameters: false,
+            modifiers: vec![],
             max_nesting: 1,
             ptr_type: None,
             current_struct_init: None,
@@ -491,7 +505,7 @@ impl SemanticAnalyzer {
         }
 
         let nesting_exhausted = (current_nest_level + 1 > max_nesting) && !defining_parameters;
-        let blocked_by_params = defining_parameters && matches!(table.last(), Some(TableTypes::Conditional(_)) | Some(TableTypes::Loop(_)));
+        let blocked_by_params = defining_parameters && matches!(table.last(), Some(TableTypes::Conditional(_))); //Some(TableTypes::Loop(_)));
 
         !nesting_exhausted && !blocked_by_params
     }
@@ -511,7 +525,11 @@ impl SemanticAnalyzer {
                 Self::resolve_in_chain(name, &mut con.table, current_nest_level + 1, max_nesting, defining_parameters)
             }
             TableTypes::Loop(while_loop) => {
-                Self::resolve_in_chain(name, &mut while_loop.table, current_nest_level + 1, max_nesting, defining_parameters)
+                if defining_parameters && while_loop.table.is_empty() {
+                    None
+                } else {
+                    Self::resolve_in_chain(name, &mut while_loop.table, current_nest_level + 1, max_nesting, defining_parameters)
+                }
             }
             TableTypes::StructLiteral(struct_def) => {
                 Self::resolve_in_chain(name, &mut struct_def.functions, current_nest_level + 1, max_nesting, defining_parameters)
@@ -537,15 +555,30 @@ impl SemanticAnalyzer {
             return None;
         }
 
-        let Some(TableTypes::Function(f)) = self.table.last() else {
-            return None;
-        };
-        let params = f.parameters.as_ref()?;
+        match self.table.last() {
+            Some(TableTypes::Function(f)) => {
+                let params = f.parameters.as_ref()?;
+                params.iter().enumerate().find_map(|(idx, entry)| match entry {
+                    TableTypes::Variable(v) if v.name.as_deref() == Some(name) => Some((idx, Scope::Parameter, ResolveType::Variable)),
+                    _ => None,
+                })
+            }
+            Some(TableTypes::Loop(looping)) => {
+                if looping.condition.len() > 1 {
+                    if let TableTypes::Variable(variable) = &looping.condition[0] {
+                        if variable.name.as_deref() == Some(name) {
+                            return Some((0, Scope::Parameter, ResolveType::Variable));
+                        }
 
-        params.iter().enumerate().find_map(|(idx, entry)| match entry {
-            TableTypes::Variable(v) if v.name.as_deref() == Some(name) => Some((idx, Scope::Parameter, ResolveType::Variable)),
+                        return None;
+                    }
+                    None
+                } else {
+                    None
+                }
+            }
             _ => None,
-        })
+        }
     }
 
     fn add_entry(&mut self, token: TokenType) {
@@ -692,7 +725,7 @@ impl SemanticAnalyzer {
             }
         }
 
-        let in_reasignment = matches!(self.active_table().last(), Some(TableTypes::Reasingment(_)));
+        let in_reasignment = matches!(self.active_table().last(), Some(TableTypes::Reasingment(_))) && !self.last_finished;
         let in_function_call = matches!(self.active_table().last(), Some(TableTypes::FunctionCall(_))) && self.defining_parameters;
         let in_conditional = matches!(self.active_table().last(), Some(TableTypes::Conditional(_))) && self.defining_parameters;
 
@@ -703,6 +736,7 @@ impl SemanticAnalyzer {
             token: token,
             index: index,
         };
+
         if in_argument && self.current_struct_init.is_none() {
             self.handle_argument(entry, in_reasignment, in_function_call, in_nested_call, expected_fc_params, fc_params_len, fc_target);
         } else {
@@ -910,7 +944,7 @@ impl SemanticAnalyzer {
             }
         }
 
-        if in_call_or_reasign && token == TokenType::Unknow && index.is_none() {
+        if in_call_or_reasign && token == TokenType::Unknow && index.is_none() && self.modifiers.contains(&Modifiers::InForLoop) {
             let error = Error {
                 msg: format!("Undefined symbol: {}", word.word),
                 line: word.line.unwrap_or(0),
@@ -1456,9 +1490,7 @@ impl SemanticAnalyzer {
         if self.set_value || self.set_return_value {
             self.last_finished = false;
         } else {
-            if !self.defining_parameters {
-                self.last_finished = true;
-            }
+            self.last_finished = !self.defining_parameters;
             self.set_value = false;
         }
 
@@ -1485,6 +1517,8 @@ impl SemanticAnalyzer {
             }
             i += 1;
         }
+
+        println!("{:?}", self.set_value);
 
         for word in normalized_words {
             self.tokenize_word(word);
@@ -1808,7 +1842,7 @@ pub fn analyze_semantically(stack: Vec<Block>, file_str: Vec<String>, file_name:
 
     if debug {
         semantic_analyzer._print();
-        //println!("{:#?}", semantic_analyzer.table);
+        println!("{:#?}", semantic_analyzer.table);
     }
 
     let len = semantic_analyzer.warning_messages.len();

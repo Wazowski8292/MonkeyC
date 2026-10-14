@@ -6,9 +6,11 @@ This page lists what's planned for Monkey C, split into near-term work and longe
 
 These are the next things planned for the language itself.
 
+- **Desing test** - be able to easily check that everything works and nothing was broken.
+- **Multiple files** - adding the ability to be able to call and use several files in one project easily.
+- **Do while loop** - it is a while loop but the condition check is at the end.
 - **Substitute embeded functions** - Rewrite embeded functions so they are writen in actuall Monkey C.
 - **Enums** — an enum is a type made up of a fixed set of named values, useful for representing something that can only be one of a few known states.
-- **For loops** — a loop construct built for the common case of repeating something a known number of times, as an alternative to writing that logic with a `while` loop.
 
 ## Long Term Goals
 
@@ -17,8 +19,6 @@ These are bigger, further-out goals for the language and its standard library.
 - **Allocating diferent amounts of memory** - write now every variable uses 8 bytes and the idea is to build a system similar to C with buffers and all of that.
 - **Array length lookup** — a built-in way to ask how many elements an [array](./language-guide.md#arrays) holds, rather than tracking that separately yourself.
 - **Operator sanity checking** — validation that an operator is actually being used on types it makes sense for, e.g. catching an attempt to add a `bool` and a `char`.
-- **Multiple files** - adding the ability to be able to call and use several files in one project easily.
-- **Enums with stored values** — enums that can carry data along with each variant, similar to how Rust's enums work, rather than just being a plain named value.
 - **Heap allocation** — support for allocating memory that outlives the function it was created in, as opposed to memory that's automatically cleaned up when a function returns.
 - **Vectors** — a growable, resizable array type, for when the number of elements isn't known ahead of time.
 - **Vector helper functions** — common operations on vectors (things like adding, removing, or searching for elements) built into the language or its standard library.
