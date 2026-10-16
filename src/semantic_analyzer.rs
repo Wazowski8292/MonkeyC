@@ -510,6 +510,26 @@ impl SemanticAnalyzer {
         !nesting_exhausted && !blocked_by_params
     }
 
+    fn find_loop_var(table: &Vec<TableTypes>, name: &str) -> Option<(usize, Scope, ResolveType)> {
+        match table.last() {
+            Some(TableTypes::Conditional(c)) => Self::find_loop_var(&c.table, name),
+            Some(TableTypes::Loop(l)) => {
+            // innermost loop first, so an inner variable shadows an outer one
+                Self::find_loop_var(&l.table, name).or_else(|| {
+                    if l.condition.len() > 1 {
+                        if let Some(TableTypes::Variable(v)) = l.condition.first() {
+                            if v.name.as_deref() == Some(name) {
+                                return Some((0, Scope::Parameter, ResolveType::Variable));
+                            }
+                        }
+                    }
+                    None
+                })
+            }
+            _ => None,
+        }
+    }
+
     fn descend_and_resolve(
         name: &str, table: &mut Vec<TableTypes>, current_nest_level: usize, max_nesting: usize, defining_parameters: bool,
     ) -> Option<(usize, Scope, ResolveType)> {
@@ -557,6 +577,10 @@ impl SemanticAnalyzer {
 
         match self.table.last() {
             Some(TableTypes::Function(f)) => {
+                if let Some(found) = Self::find_loop_var(&f.table, name) {
+                    return Some(found);
+                }
+
                 let params = f.parameters.as_ref()?;
                 params.iter().enumerate().find_map(|(idx, entry)| match entry {
                     TableTypes::Variable(v) if v.name.as_deref() == Some(name) => Some((idx, Scope::Parameter, ResolveType::Variable)),
@@ -653,12 +677,14 @@ impl SemanticAnalyzer {
     }
 
     fn tokenize_word(&mut self, mut word: Word) {
+        let length = word.word.len();
+
         match word.word.clone().chars().next() {
-            Some('&') => {
+            Some('&') if length > 1 => {
                 self.ptr_type = Some(PointerType::Reference);
                 word.word = word.word.replace("&", "");
             }
-            Some('*') => {
+            Some('*') if length > 1 => {
                 self.ptr_type = Some(PointerType::Pointer);
                 word.word = word.word.replace("*", "");
             }
@@ -728,6 +754,26 @@ impl SemanticAnalyzer {
         let in_reasignment = matches!(self.active_table().last(), Some(TableTypes::Reasingment(_))) && !self.last_finished;
         let in_function_call = matches!(self.active_table().last(), Some(TableTypes::FunctionCall(_))) && self.defining_parameters;
         let in_conditional = matches!(self.active_table().last(), Some(TableTypes::Conditional(_))) && self.defining_parameters;
+        let in_for_loop = matches!(
+            self.active_table().last(),
+            Some(TableTypes::Loop(loop_node)) if matches!(loop_node.token_type, TokenType::ForLoop)
+        );
+
+        if let Some(TableTypes::Function(func)) = self.table.last() {
+            if func.table.is_empty() && func.name.is_some()
+            {
+                if let Some(table_types) = func.parameters.clone() && let Some(TableTypes::Variable(var)) = table_types.last() && var.name.is_none() {} else {
+                    self.last_finished = true;
+                }
+            }
+        }
+        
+        if in_for_loop && !self.modifiers.contains(&Modifiers::InForLoop) {
+            println!("For");
+            self.modifiers.push(Modifiers::InForLoop);
+        } else if !in_for_loop && let Some(index) = self.modifiers.iter().position(|value| *value == Modifiers::InForLoop) {
+            self.modifiers.remove(index);
+        }
 
         let in_call = in_reasignment || in_function_call || in_conditional || in_nested_call;
         let in_argument = !self.last_finished || self.set_value || self.set_return_value || in_call;
@@ -738,6 +784,7 @@ impl SemanticAnalyzer {
         };
 
         if in_argument && self.current_struct_init.is_none() {
+            println!("{} {}", word.word, self.last_finished);
             self.handle_argument(entry, in_reasignment, in_function_call, in_nested_call, expected_fc_params, fc_params_len, fc_target);
         } else {
             self.handle_new_entry(entry);
@@ -944,7 +991,9 @@ impl SemanticAnalyzer {
             }
         }
 
-        if in_call_or_reasign && token == TokenType::Unknow && index.is_none() && self.modifiers.contains(&Modifiers::InForLoop) {
+        if in_call_or_reasign && token == TokenType::Unknow && index.is_none() && !self.modifiers.contains(&Modifiers::InForLoop) && !word.word.starts_with("self[")
+            && word.word != "self" {
+            
             let error = Error {
                 msg: format!("Undefined symbol: {}", word.word),
                 line: word.line.unwrap_or(0),
@@ -1518,8 +1567,6 @@ impl SemanticAnalyzer {
             i += 1;
         }
 
-        println!("{:?}", self.set_value);
-
         for word in normalized_words {
             self.tokenize_word(word);
             self.last_finished = false;
@@ -1535,7 +1582,8 @@ impl SemanticAnalyzer {
         if w.word.len() > 1 && w.word.ends_with(',') && !w.word.starts_with('"') {
             w.word.pop();
         }
-        if w.word == "," || w.word == "{" || w.word == "}" {
+        
+        if w.word == "," {
             *counter += 1;
             return false;
         }

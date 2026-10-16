@@ -118,7 +118,7 @@ pub fn parse_text(file_path: &String, debug: bool) -> Result<(Vec<Block>, Vec<St
                     }
                     skip = false;
                 }
-                '/' => {
+                '#' => {
                     if skip {
                         break;
                     }

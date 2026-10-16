@@ -5,3 +5,10 @@ edition = "2024"
 
 [profile.dev]
 debug = true
+
+[[test]]
+name = "programs"
+harness = false
+
+[dev-dependencies]
+libtest-mimic = "0.7"
