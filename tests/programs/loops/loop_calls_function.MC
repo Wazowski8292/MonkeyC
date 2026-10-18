@@ -4,7 +4,8 @@ fn square(int n) -> int {
 
 fn main() {
     for(int i = 1, i < 5, i += 1) {
-        print_int(square(i));
+        int square = square(i)
+        print_int(square);
     }
 }
 ## expect: 1

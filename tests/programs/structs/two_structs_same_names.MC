@@ -20,8 +20,10 @@ fn main() {
     Test a;
     SecondTest b;
 
-    print_int(a::add());
-    print_int(b::add());
+    int ra = a::add();
+    print_int(ra);
+    int rb = b::add();
+    print_int(rb);
 }
 ## expect: 11
 ## expect: 15

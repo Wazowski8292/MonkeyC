@@ -256,7 +256,7 @@ impl ThreeAddressCodeGenerator {
                     is_array: true,
                     array_size: Some(struct_literal_length.clone()),
                 };
-                function.parameters.get_or_insert_with(Vec::new).push(TableTypes::Variable(variable));
+                function.parameters.get_or_insert_with(Vec::new).insert(0, TableTypes::Variable(variable));
             }
         }
         self.generate(struct_literal.functions);
@@ -391,10 +391,12 @@ impl ThreeAddressCodeGenerator {
                 _ => false,
             };
 
-            let result_name = if is_top && !next_continues { target.clone() } else { self.next_temp() };
+            let is_final = is_top && !next_continues;
+            let result_name = if is_final { target.clone() } else { self.next_temp() };
+            let this_type = if tac_type == Type::Return && !is_final { Type::Variable } else { tac_type.clone() };
 
             self.tac_table.push(Tac {
-                tac_type: tac_type.clone(),
+                tac_type: this_type,
                 arguments: vec![left, right],
                 operator: Some(op),
                 result: Some(result_name.clone()),
@@ -770,7 +772,6 @@ impl ThreeAddressCodeGenerator {
             }
         }
 
-        println!("{:#?}", loop_node.condition.clone());
         self.add_conditional_block(Type::Loop, Type::LoopEnd, conditional.clone(), loop_node.table);
     }
 

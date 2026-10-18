@@ -1,5 +1,6 @@
 fn main() {
-    print_int(later());
+    int r = later();
+    print_int(r);
 }
 
 fn later() -> int {

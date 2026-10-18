@@ -16,8 +16,10 @@ fn main() {
     a::inc();
     a::inc();
     b::inc();
-    print_int(a::get());
-    print_int(b::get());
+    int ra = a::get();
+    print_int(ra);
+    int rb = b::get();
+    print_int(rb);
 }
 ## expect: 2
 ## expect: 1

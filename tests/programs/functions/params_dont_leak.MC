@@ -5,7 +5,8 @@ fn change(int n) -> int {
 
 fn main() {
     int a = 1;
-    print_int(change(a));
+    int r = change(a);
+    print_int(r);
     print_int(a);
 }
 ## expect: 101

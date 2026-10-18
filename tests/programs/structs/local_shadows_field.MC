@@ -11,6 +11,7 @@ struct Test {
 
 fn main() {
     Test a;
-    print_int(a::add());
+    int r = a::add();
+    print_int(r);
 }
 ## expect: 11

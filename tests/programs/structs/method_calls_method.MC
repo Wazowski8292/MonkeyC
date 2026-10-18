@@ -14,7 +14,7 @@ struct Calc {
 
 fn main() {
     Calc c;
-    print_int(c::sum_again());
+    int r = c::sum_again();
+    print_int(r);
 }
-## ignore:
 ## expect: 7

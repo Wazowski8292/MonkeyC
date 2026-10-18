@@ -2,13 +2,18 @@ fn fact(int n) -> int {
     if (n < 2) {
         return 1;
     }
-    return n * fact(n - 1);
+    int m = n - 1;
+    int r = fact(m);
+    return n * r;
 }
 
 fn main() {
-    print_int(fact(1));
-    print_int(fact(5));
-    print_int(fact(6));
+    int a = fact(1);
+    print_int(a);
+    int b = fact(5);
+    print_int(b);
+    int c = fact(6);
+    print_int(c);
 }
 ## expect: 1
 ## expect: 120

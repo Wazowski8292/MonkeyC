@@ -5,15 +5,21 @@ struct Math {
         return self::base + v;
     }
 
-    fn scaled(int a , int b) -> int {
+    fn scaled(int a ; int b) -> int {
         return self::base * a + b;
     }
 }
 
 fn main() {
     Math m;
-    print_int(m::plus(5));
-    print_int(m::scaled(2 , 3));
+    int five = 5;
+    int r1 = m::plus(five);
+    print_int(r1);
+
+    int two = 2;
+    int three = 3;
+    int r2 = m::scaled(two ; three);
+    print_int(r2);
 }
 ## expect: 15
 ## expect: 23

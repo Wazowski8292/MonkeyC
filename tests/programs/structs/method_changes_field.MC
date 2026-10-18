@@ -15,6 +15,7 @@ fn main() {
     c::inc();
     c::inc();
     c::inc();
-    print_int(c::get());
+    int r = c::get();
+    print_int(r);
 }
 ## expect: 3

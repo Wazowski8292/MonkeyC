@@ -14,10 +14,10 @@ fn compute() -> int {
 }
 
 fn main() {
-    print_int(compute());
-    print_int(compute());
+    int r = compute();
+    print_int(r);
+    int r2 = compute();
+    print_int(r2);
 }
-## ignore:
 ## expect: 11
 ## expect: 11
-

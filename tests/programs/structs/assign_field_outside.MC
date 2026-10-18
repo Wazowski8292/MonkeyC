@@ -11,7 +11,8 @@ fn main() {
     Test a;
     a::x = 20;
     print_int(a::x);
-    print_int(a::add());
+    int r = a::add();
+    print_int(r);
 }
 ## expect: 20
 ## expect: 26

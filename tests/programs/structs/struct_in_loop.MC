@@ -15,6 +15,7 @@ fn main() {
     for(int i = 0, i < 4, i += 1) {
         c::inc();
     }
-    print_int(c::get());
+    int r = c::get();
+    print_int(r);
 }
 ## expect: 4

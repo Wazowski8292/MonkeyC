@@ -3,10 +3,12 @@ fn inner() -> int {
 }
 
 fn outer() -> int {
-    return inner() + 1;
+    int v = inner();
+    return v + 1;
 }
 
 fn main() {
-    print_int(outer());
+    int r = outer();
+    print_int(r);
 }
 ## expect: 8

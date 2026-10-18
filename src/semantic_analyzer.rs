@@ -426,19 +426,16 @@ impl SemanticAnalyzer {
                             Self::add_inline_asm(asm, block.clone());
                         }
                     } else {
-                        let last_is_fn = matches!(self.active_table().last(), Some(TableTypes::Function(_)));
                         self.max_nesting += 1;
-
-                        if last_is_fn && !self.defining_fn {
-                            self.defining_fn = true;
-                            self.analyze(blocks.to_vec());
-                            self.defining_fn = false;
-                        } else {
-                            self.analyze(blocks.to_vec());
-                        }
-
+                        self.analyze(blocks.to_vec());
                         self.max_nesting -= 1;
                         self.current_struct_init = None;
+
+                        let nesting_funtion_end = if matches!(self.table.last(), Some(TableTypes::StructLiteral(_))) { 1 } else { 0 };
+
+                        if self.max_nesting <= nesting_funtion_end {
+                            self.defining_fn = false
+                        }
                     }
                 }
                 Block::Parameter(blocks) => {
@@ -514,7 +511,7 @@ impl SemanticAnalyzer {
         match table.last() {
             Some(TableTypes::Conditional(c)) => Self::find_loop_var(&c.table, name),
             Some(TableTypes::Loop(l)) => {
-            // innermost loop first, so an inner variable shadows an outer one
+                // innermost loop first, so an inner variable shadows an outer one
                 Self::find_loop_var(&l.table, name).or_else(|| {
                     if l.condition.len() > 1 {
                         if let Some(TableTypes::Variable(v)) = l.condition.first() {
@@ -676,6 +673,31 @@ impl SemanticAnalyzer {
         }
     }
 
+    fn current_function(&self) -> Option<&Function> {
+        match self.table.last() {
+            Some(TableTypes::Function(f)) => Some(f),
+            Some(TableTypes::StructLiteral(s)) if self.defining_fn => match s.functions.last() {
+                Some(TableTypes::Function(f)) => Some(f),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    fn callee_table(&self, name: &str) -> (&Vec<TableTypes>, bool) {
+        if let Some((struct_name, _)) = name.split_once('.') {
+            for t in &self.table {
+                if let TableTypes::StructLiteral(s) = t
+                    && s.name == struct_name
+                {
+                    return (&s.functions, true);
+                }
+            }
+        }
+
+        (&self.table, false)
+    }
+
     fn tokenize_word(&mut self, mut word: Word) {
         let length = word.word.len();
 
@@ -722,6 +744,7 @@ impl SemanticAnalyzer {
         let mut fc_target = 0;
         let mut fc_scope = Scope::Root;
         let mut fc_params_len = 0;
+        let mut fc_name = String::new();
 
         let defining_parameters = self.defining_parameters;
 
@@ -731,12 +754,14 @@ impl SemanticAnalyzer {
                 fc_target = fc.target;
                 fc_scope = fc.scope;
                 fc_params_len = fc.parameters.as_ref().map_or(0, |p| p.len());
+                fc_name = fc.name.clone();
             }
             Some(entry @ (TableTypes::Variable(_) | TableTypes::Return(_))) if defining_parameters => {
                 if let Some(pending) = Self::pending_call_in(entry) {
                     in_nested_call = true;
                     fc_target = pending.target;
                     fc_params_len = pending.parameters.as_ref().map_or(0, |p| p.len());
+                    fc_name = pending.name.clone();
                 }
             }
             _ => {}
@@ -746,8 +771,11 @@ impl SemanticAnalyzer {
         if is_fc || in_nested_call {
             if fc_scope == Scope::EnbedFunc {
                 expected_fc_params = FUNCTIONS[fc_target].parameters.len();
-            } else if let Some(TableTypes::Function(f)) = self.table.get(fc_target) {
-                expected_fc_params = f.parameters.as_ref().map_or(0, |p| p.len());
+            } else {
+                let (table, is_method) = self.callee_table(&fc_name);
+                if let Some(TableTypes::Function(f)) = table.get(fc_target) {
+                    expected_fc_params = f.parameters.as_ref().map_or(0, |p| p.len()) + is_method as usize;
+                }
             }
         }
 
@@ -759,17 +787,18 @@ impl SemanticAnalyzer {
             Some(TableTypes::Loop(loop_node)) if matches!(loop_node.token_type, TokenType::ForLoop)
         );
 
-        if let Some(TableTypes::Function(func)) = self.table.last() {
-            if func.table.is_empty() && func.name.is_some()
-            {
-                if let Some(table_types) = func.parameters.clone() && let Some(TableTypes::Variable(var)) = table_types.last() && var.name.is_none() {} else {
-                    self.last_finished = true;
-                }
-            }
+        let pending_param = self.current_function().filter(|f| f.table.is_empty() && f.name.is_some()).map(|f| {
+            matches!(
+                f.parameters.as_ref().and_then(|p| p.last()),
+                Some(TableTypes::Variable(v)) if v.name.is_none()
+            )
+        });
+
+        if let Some(false) = pending_param {
+            self.last_finished = true;
         }
-        
+
         if in_for_loop && !self.modifiers.contains(&Modifiers::InForLoop) {
-            println!("For");
             self.modifiers.push(Modifiers::InForLoop);
         } else if !in_for_loop && let Some(index) = self.modifiers.iter().position(|value| *value == Modifiers::InForLoop) {
             self.modifiers.remove(index);
@@ -784,7 +813,6 @@ impl SemanticAnalyzer {
         };
 
         if in_argument && self.current_struct_init.is_none() {
-            println!("{} {}", word.word, self.last_finished);
             self.handle_argument(entry, in_reasignment, in_function_call, in_nested_call, expected_fc_params, fc_params_len, fc_target);
         } else {
             self.handle_new_entry(entry);
@@ -810,7 +838,7 @@ impl SemanticAnalyzer {
                         return;
                     }
                 } else if reasing.name == name && reasing.parameters.as_ref().map_or(true, |p| p.is_empty()) {
-                    self.active_table().pop();
+                    //self.active_table().pop();
                 }
             }
             Some(TableTypes::Variable(v)) => {
@@ -991,9 +1019,13 @@ impl SemanticAnalyzer {
             }
         }
 
-        if in_call_or_reasign && token == TokenType::Unknow && index.is_none() && !self.modifiers.contains(&Modifiers::InForLoop) && !word.word.starts_with("self[")
-            && word.word != "self" {
-            
+        if in_call_or_reasign
+            && token == TokenType::Unknow
+            && index.is_none()
+            && !self.modifiers.contains(&Modifiers::InForLoop)
+            && !word.word.starts_with("self[")
+            && word.word != "self"
+        {
             let error = Error {
                 msg: format!("Undefined symbol: {}", word.word),
                 line: word.line.unwrap_or(0),
@@ -1392,7 +1424,6 @@ impl SemanticAnalyzer {
                     };
 
                     self.push_member_entry(TableTypes::Reasingment(reasign));
-                    //self.tokenize_word(Word { word: format!("{}[{}]", inst_name, pos), ..word });
                 }
                 Member::Method(pos) => {
                     let name = format!("{}.{}", struct_def_name, &word.word.clone());
@@ -1413,7 +1444,6 @@ impl SemanticAnalyzer {
                         scope: Scope::Function,
                     };
                     self.push_member_entry(TableTypes::FunctionCall(call));
-                    // self.set_value = true;
                 }
                 Member::Missing(struct_name) => {
                     self.error_messages.push(Error {
@@ -1508,13 +1538,110 @@ impl SemanticAnalyzer {
     }
 
     fn push_member_entry(&mut self, entry: TableTypes) {
-        if let Some(TableTypes::FunctionCall(call)) = self.active_table().last_mut() {
-            if let Some(ref mut params) = call.parameters {
-                params.push(entry);
-                return;
-            }
+        let last_finished = self.last_finished;
+        let def_parameters = self.defining_parameters;
+
+        let leftover = match self.active_table().last_mut() {
+            Some(last) => Self::attach_member(last, entry, last_finished, def_parameters),
+            None => Some(entry),
+        };
+
+        if let Some(entry) = leftover {
+            self.active_table().push(entry);
         }
-        self.active_table().push(entry);
+    }
+
+    fn attach_member(target: &mut TableTypes, entry: TableTypes, last_finished: bool, defining_parameters: bool) -> Option<TableTypes> {
+        if let Some(fc) = Self::pending_call_in_mut(target) {
+            fc.parameters.get_or_insert_with(Vec::new).push(entry);
+            return None;
+        }
+
+        match target {
+            TableTypes::FunctionCall(call) => {
+                call.parameters.get_or_insert_with(Vec::new).push(entry);
+                None
+            }
+            TableTypes::Reasingment(reasign) => {
+                if let TokenType::StructDef(_) = reasign.token_type.clone()
+                    && let TableTypes::Reasingment(reasing_entry) = entry
+                {
+                    reasign.token_type = TokenType::Unknow;
+                    reasign.array_index = reasing_entry.array_index;
+                } else {
+                    reasign.parameters.get_or_insert_with(Vec::new).push(entry);
+                }
+                None
+            }
+            TableTypes::Variable(var) if !last_finished => match Self::member_to_values(entry) {
+                Ok(values) => {
+                    var.value.get_or_insert_with(Vec::new).extend(values);
+                    None
+                }
+                Err(entry) => Some(entry),
+            },
+            TableTypes::Return(ret) => match ret.value.as_mut() {
+                Some(var) => match Self::member_to_values(entry) {
+                    Ok(values) => {
+                        var.value.get_or_insert_with(Vec::new).extend(values);
+                        None
+                    }
+                    Err(entry) => Some(entry),
+                },
+                None => Some(entry),
+            },
+            TableTypes::Conditional(c) => match c.condition.last_mut() {
+                Some(last) => match Self::attach_member(last, entry, last_finished, defining_parameters) {
+                    Some(entry) => {
+                        c.condition.push(entry);
+                        None
+                    }
+                    None => None,
+                },
+                None => {
+                    c.condition.push(entry);
+                    None
+                }
+            },
+            TableTypes::Loop(l) => match l.condition.last_mut() {
+                Some(last) => match Self::attach_member(last, entry, last_finished, defining_parameters) {
+                    Some(entry) => {
+                        l.condition.push(entry);
+                        None
+                    }
+                    None => None,
+                },
+                None => {
+                    l.condition.push(entry);
+                    None
+                }
+            },
+            _ => Some(entry),
+        }
+    }
+
+    fn member_to_values(entry: TableTypes) -> Result<Vec<Value>, TableTypes> {
+        match entry {
+            TableTypes::FunctionCall(fc) => Ok(vec![Value::FuncCall(fc)]),
+            TableTypes::Reasingment(r) => {
+                let name = r.name;
+                let value = match (r.array_index, r.ptr) {
+                    (Some(idx), _) => Value::Index(name, idx),
+                    (None, Some(PointerType::Reference)) => Value::Ref(name),
+                    (None, Some(PointerType::Pointer)) => Value::Deref(name),
+                    (None, None) => Value::Var(name),
+                };
+                Ok(vec![value])
+            }
+            TableTypes::Variable(mut v) => match v.value.take() {
+                Some(vals) if !vals.is_empty() => Ok(vals),
+                other => {
+                    v.value = other;
+                    Err(TableTypes::Variable(v))
+                }
+            },
+            other => Err(other),
+        }
     }
 
     fn pending_call_in(entry: &TableTypes) -> Option<&FunctionCall> {
@@ -1582,7 +1709,7 @@ impl SemanticAnalyzer {
         if w.word.len() > 1 && w.word.ends_with(',') && !w.word.starts_with('"') {
             w.word.pop();
         }
-        
+
         if w.word == "," {
             *counter += 1;
             return false;
@@ -1627,11 +1754,6 @@ impl SemanticAnalyzer {
 
         if w.word.contains("::") {
             self.separete_line_by(&mut normalized_words, w.clone(), "::".to_string());
-
-            was_modified = true;
-        }
-        if w.word.contains(".") {
-            self.separete_line_by(&mut normalized_words, w.clone(), ".".to_string());
 
             was_modified = true;
         }
