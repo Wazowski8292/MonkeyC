@@ -8,6 +8,7 @@ use std::vec::Vec;
 #[derive(PartialEq)]
 enum Modifiers {
     InForLoop,
+    StandAloneStructCall,
 }
 
 struct Entry {
@@ -448,7 +449,10 @@ impl SemanticAnalyzer {
     }
 
     fn resolve(&mut self, name: String) -> Option<(usize, Scope, ResolveType)> {
-        let lookup_name = crate::variable_types::parse_array_syntax(&name).map(|(arr_name, _)| arr_name).unwrap_or(name);
+        let lookup_name = crate::variable_types::parse_array_syntax(&name).map(|(arr_name, _)| arr_name).unwrap_or(name.clone());
+        if name.clone().starts_with("self") {
+            return Some((0, Scope::Root, ResolveType::Variable));
+        } 
 
         if let Some(result) = Self::resolve_in_chain(&lookup_name, &mut self.table, 0, self.max_nesting, self.defining_parameters) {
             return Some(result);
@@ -779,9 +783,25 @@ impl SemanticAnalyzer {
             }
         }
 
+        let entry = Entry {
+            word: word.clone(),
+            token: token,
+            index: index,
+        };
+
         let in_reasignment = matches!(self.active_table().last(), Some(TableTypes::Reasingment(_))) && !self.last_finished;
         let in_function_call = matches!(self.active_table().last(), Some(TableTypes::FunctionCall(_))) && self.defining_parameters;
-        let in_conditional = matches!(self.active_table().last(), Some(TableTypes::Conditional(_))) && self.defining_parameters;
+        let in_argument = self.get_if_in_argument(in_nested_call.clone(), in_reasignment.clone(), in_function_call);
+
+        if in_argument && self.current_struct_init.is_none() {
+            self.handle_argument(entry, in_reasignment, in_function_call, in_nested_call, expected_fc_params, fc_params_len, fc_target);
+        } else {
+            self.handle_new_entry(entry);
+        }
+    }
+
+    fn get_if_in_argument(&mut self, in_nested_call: bool, in_reasignment: bool, in_function_call: bool) -> bool {
+       let in_conditional = matches!(self.active_table().last(), Some(TableTypes::Conditional(_))) && self.defining_parameters;
         let in_for_loop = matches!(
             self.active_table().last(),
             Some(TableTypes::Loop(loop_node)) if matches!(loop_node.token_type, TokenType::ForLoop)
@@ -805,18 +825,8 @@ impl SemanticAnalyzer {
         }
 
         let in_call = in_reasignment || in_function_call || in_conditional || in_nested_call;
-        let in_argument = !self.last_finished || self.set_value || self.set_return_value || in_call;
-        let entry = Entry {
-            word: word.clone(),
-            token: token,
-            index: index,
-        };
-
-        if in_argument && self.current_struct_init.is_none() {
-            self.handle_argument(entry, in_reasignment, in_function_call, in_nested_call, expected_fc_params, fc_params_len, fc_target);
-        } else {
-            self.handle_new_entry(entry);
-        }
+        
+        !self.last_finished || self.set_value || self.set_return_value || in_call
     }
 
     fn eliminate_instance_placeholder(&mut self, name: &str) {
@@ -838,6 +848,7 @@ impl SemanticAnalyzer {
                         return;
                     }
                 } else if reasing.name == name && reasing.parameters.as_ref().map_or(true, |p| p.is_empty()) {
+                    self.modifiers.push(Modifiers::StandAloneStructCall);
                     //self.active_table().pop();
                 }
             }
@@ -1368,6 +1379,7 @@ impl SemanticAnalyzer {
             self.add_entry(token.clone());
         } else if let Some(inst_name) = self.current_struct_init.clone() {
             self.current_struct_init = None;
+            self.set_value = false;
 
             let inst_index = Self::resolve_in_chain(&inst_name, &mut self.table, 0, self.max_nesting, self.defining_parameters)
                 .or_else(|| self.resolve_in_parameters(&inst_name));
@@ -1540,6 +1552,11 @@ impl SemanticAnalyzer {
     fn push_member_entry(&mut self, entry: TableTypes) {
         let last_finished = self.last_finished;
         let def_parameters = self.defining_parameters;
+
+        if let Some(pos) = self.modifiers.iter().rposition(|e| matches!(e, Modifiers::StandAloneStructCall)) {
+            self.modifiers.remove(pos);
+            self.active_table().pop();
+        }
 
         let leftover = match self.active_table().last_mut() {
             Some(last) => Self::attach_member(last, entry, last_finished, def_parameters),
