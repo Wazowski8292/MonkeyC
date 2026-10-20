@@ -5,3 +5,4 @@ pub mod semantic_analyzer;
 pub mod three_address_code_gen;
 pub mod variable_types;
 pub mod write_asm;
+pub mod error_handler;

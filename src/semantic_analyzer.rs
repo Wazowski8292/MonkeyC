@@ -3,6 +3,9 @@ use crate::parser::{Block, Word};
 use crate::variable_types::{
     Conditional, Function, FunctionCall, InlineAssembly, Loop, PointerType, Reasingment, Return, StructLiteral, Types, Value, Variable,
 };
+use crate::report;
+use crate::warn;
+
 use std::vec::Vec;
 
 #[derive(PartialEq)]
@@ -15,13 +18,6 @@ struct Entry {
     word: Word,
     token: TokenType,
     index: Option<(usize, Scope, ResolveType)>,
-}
-
-#[derive(Clone)]
-struct Error {
-    msg: String,
-    line: usize,
-    char: usize,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -337,9 +333,8 @@ enum ResolveType {
 }
 
 struct SemanticAnalyzer {
+    file_name: String,
     table: Vec<TableTypes>,
-    error_messages: Vec<Error>,
-    warning_messages: Vec<Error>,
     set_value: bool,
     set_return_value: bool,
     defining_fn: bool,
@@ -352,11 +347,10 @@ struct SemanticAnalyzer {
 }
 
 impl SemanticAnalyzer {
-    pub fn new() -> Self {
+    pub fn new(file_name: String) -> Self {
         Self {
+            file_name,
             table: vec![],
-            error_messages: vec![],
-            warning_messages: vec![],
             set_value: false,
             set_return_value: false,
             defining_fn: false,
@@ -736,7 +730,7 @@ impl SemanticAnalyzer {
                 return;
             }
             TokenType::Assembly => {
-                self.warning_messages.push( Error { msg: "The Monkey C compiler does not verify asmembly, you must check it by your self and remeber that the asmbler will return an error if it is the case, but it will not go through this compiler".to_string(), line: word.line.unwrap_or(0).clone(), char: word.char_num.unwrap_or(0).clone() } )
+                warn!(self.file_name.clone(), word.line.unwrap_or(0).clone(), word.char_num.unwrap_or(0).clone(), "The Monkey C compiler does not verify asmembly, you must check it by your self and remeber that the asmbler will return an error if it is the case, but it will not go through this compiler") 
             }
             _ => {}
         }
@@ -1018,13 +1012,12 @@ impl SemanticAnalyzer {
 
         if in_function_call || in_nested_call {
             if fc_params_len >= expected_fc_params {
-                let error = Error {
-                    msg: format!("Too many arguments for function call. Expected: {}, Found: {}", expected_fc_params, fc_params_len + 1),
-                    line: word.line.unwrap_or(0),
-                    char: word.char_num.unwrap_or(0),
-                };
-
-                self.error_messages.push(error);
+                report!(
+                    self.file_name.clone(),
+                    word.line.unwrap_or(0),
+                    word.char_num.unwrap_or(0),
+                    "Too many arguments for function call. Expected: {}, Found: {}", expected_fc_params, fc_params_len + 1,
+                );
             } else {
                 self.check_parameters(entry_info, fc_params_len, fc_target);
             }
@@ -1037,13 +1030,12 @@ impl SemanticAnalyzer {
             && !word.word.starts_with("self[")
             && word.word != "self"
         {
-            let error = Error {
-                msg: format!("Undefined symbol: {}", word.word),
-                line: word.line.unwrap_or(0),
-                char: word.char_num.unwrap_or(0),
-            };
-
-            self.error_messages.push(error);
+            report!(
+                self.file_name.clone(),
+                word.line.unwrap_or(0),
+                word.char_num.unwrap_or(0),
+                "Undefined symbol: {}", word.word,
+            );
         }
 
         let rhs_ptr_type = self.ptr_type.clone();
@@ -1082,13 +1074,13 @@ impl SemanticAnalyzer {
                 }
             }
             None => {
-                let error = Error {
-                    msg: "There wasn't a last entry".to_string(),
-                    line: word.line.unwrap_or(0),
-                    char: word.char_num.unwrap_or(0),
-                };
+                report!(
+                    self.file_name.clone(),
+                    word.line.unwrap_or(0),
+                    word.char_num.unwrap_or(0),
+                    "There wasn't a last entry",
+                );
 
-                self.error_messages.push(error);
                 return;
             }
             _ => {}
@@ -1100,30 +1092,26 @@ impl SemanticAnalyzer {
                 Some(PointerType::Reference) => "&",
                 _ => "",
             };
-            let error = Error {
-                msg: format!(
-                    "Type mismatch. Expected: {}{}, Found: {}",
-                    ptr_type_str,
-                    expected.to_str(),
-                    found.unwrap_or(TokenType::Unknow).to_str()
-                ),
-                line: word.line.unwrap_or(0),
-                char: word.char_num.unwrap_or(0),
-            };
-
-            self.error_messages.push(error);
+            report!(
+                self.file_name.clone(),
+                word.line.unwrap_or(0),
+                word.char_num.unwrap_or(0),
+                "Type mismatch. Expected: {}{}, Found: {}",
+                ptr_type_str,
+                expected.to_str(),
+                found.unwrap_or(TokenType::Unknow).to_str()
+            );
         }
 
         let new_entry = match self.active_table().last_mut() {
             Some(entry) => entry,
             None => {
-                let error = Error {
-                    msg: "There wasn't a last entry".to_string(),
-                    line: word.line.unwrap_or(0),
-                    char: word.char_num.unwrap_or(0),
-                };
-
-                self.error_messages.push(error);
+                report!(
+                    self.file_name.clone(),
+                    word.line.unwrap_or(0),
+                    word.char_num.unwrap_or(0), 
+                    "There wasn't a last entry"
+               );
                 return;
             }
         };
@@ -1196,18 +1184,15 @@ impl SemanticAnalyzer {
 
             if let Some(actual_type) = actual_type {
                 if actual_type != expected_type {
-                    let error = Error {
-                        msg: format!(
-                            "Type mismatch for argument {} of function call: expected {:?}, got {:?}",
-                            fc_params_len + 1,
-                            expected_type,
-                            actual_type
-                        ),
-                        line: word.line.unwrap_or(0),
-                        char: word.char_num.unwrap_or(0),
-                    };
-
-                    self.error_messages.push(error);
+                    report!(
+                        self.file_name.clone(),
+                        word.line.unwrap_or(0),
+                        word.char_num.unwrap_or(0),
+                        "Type mismatch for argument {} of function call: expected {:?}, got {:?}",
+                        fc_params_len + 1,
+                        expected_type,
+                        actual_type,
+                    );
                 }
             }
 
@@ -1231,18 +1216,16 @@ impl SemanticAnalyzer {
                     None => "plain value",
                 };
 
-                let error = Error {
-                    msg: format!(
-                        "Pointer kind mismatch for argument {} of function call: expected {}, got {}",
-                        fc_params_len + 1,
-                        expected_str,
-                        actual_str
-                    ),
-                    line: word.line.unwrap_or(0),
-                    char: word.char_num.unwrap_or(0),
-                };
+                report!(
+                    self.file_name.clone(),
+                    word.line.unwrap_or(0),
+                    word.char_num.unwrap_or(0),                   
+                    "Pointer kind mismatch for argument {} of function call: expected {}, got {}",
+                    fc_params_len + 1,
+                    expected_str,
+                    actual_str,
+                );
 
-                self.error_messages.push(error);
             }
         }
     }
@@ -1321,18 +1304,15 @@ impl SemanticAnalyzer {
 
         if let Some(ret_type) = return_type {
             if ret_type != expected_type {
-                let error = Error {
-                    msg: format!(
-                        "Type mismatch: variable is '{}' but function '{}' returns '{}'",
-                        expected_type.to_str(),
-                        word.word,
-                        ret_type.to_str()
-                    ),
-                    line: word.line.unwrap_or(0),
-                    char: word.char_num.unwrap_or(0),
-                };
-
-                self.error_messages.push(error);
+                report!(
+                    self.file_name.clone(),
+                    word.line.unwrap_or(0),
+                    word.char_num.unwrap_or(0),
+                    "Type mismatch: variable is '{}' but function '{}' returns '{}'",
+                    expected_type.to_str(),
+                    word.word,
+                    ret_type.to_str(),
+                );
             }
         }
     }
@@ -1458,11 +1438,12 @@ impl SemanticAnalyzer {
                     self.push_member_entry(TableTypes::FunctionCall(call));
                 }
                 Member::Missing(struct_name) => {
-                    self.error_messages.push(Error {
-                        msg: format!("'{}' is neither a field nor a method of struct '{}'", word.word, struct_name),
-                        line: word.line.unwrap_or(0),
-                        char: word.char_num.unwrap_or(0),
-                    });
+                    report!(
+                        self.file_name.clone(),
+                        word.line.unwrap_or(0),
+                        word.char_num.unwrap_or(0), 
+                        "'{}' is neither a field nor a method of struct '{}'", word.word, struct_name,
+                   );
                 }
                 Member::Unresolved => {
                     let reasign = Reasingment {
@@ -1523,13 +1504,12 @@ impl SemanticAnalyzer {
                 self.active_table().push(TableTypes::Reasingment(reasign));
             }
         } else {
-            let error = Error {
-                msg: format!("Undefined symbol: {}", word.word),
-                line: word.line.unwrap_or(0),
-                char: word.char_num.unwrap_or(0),
-            };
-
-            self.error_messages.push(error);
+            report!(
+                self.file_name.clone(),
+                word.line.unwrap_or(0),
+                word.char_num.unwrap_or(0),
+                "Undefined symbol: {}", word.word,
+            );
         }
     }
 
@@ -1805,72 +1785,6 @@ impl SemanticAnalyzer {
         }
     }
 
-    fn general_info_print(&self, code: Vec<String>, word: Error) {
-        let error_line = (word.line - 1) as usize;
-        let total_lines = code.len();
-
-        let mut start = if error_line > 2 { error_line - 2 } else { 1 };
-        let mut end = start + 4;
-
-        if end > total_lines {
-            end = total_lines;
-            start = if end > 4 { end - 4 } else { 1 };
-        }
-
-        let width = (end + 1).to_string().len();
-
-        for i in start..=end {
-            let line_content = &code[i - 1];
-            println!("{:>width$} | {}", i + 1, line_content, width = width);
-
-            if i == error_line {
-                let (word_start, word_len) = Self::word_span_at(line_content, word.char as usize);
-                let gutter_len = width + 3;
-                let leading_spaces = " ".repeat(gutter_len + word_start.saturating_sub(1));
-                let squiggles = "~".repeat(word_len.max(1));
-                println!("{}{}", leading_spaces, squiggles);
-            }
-        }
-    }
-
-    fn print_errors(&self, code: Vec<String>, file_name: String, error_type: String) {
-        for error in self.error_messages.iter() {
-            println!("\n[{}]: {}", error_type, error.msg);
-            println!("--> {} line:{}, char pos :{}", file_name, error.line.to_string(), error.char.to_string());
-            println!();
-
-            self.general_info_print(code.clone(), error.clone());
-
-            println!();
-        }
-    }
-
-    fn word_span_at(line: &str, pos: usize) -> (usize, usize) {
-        let chars: Vec<char> = line.chars().collect();
-        if chars.is_empty() {
-            return (pos, 1);
-        }
-
-        let idx = pos.saturating_sub(1).min(chars.len() - 1);
-        let is_word_char = |c: char| c.is_alphanumeric() || c == '_';
-
-        let mut start = idx;
-        while start > 0 && is_word_char(chars[start - 1]) {
-            start -= 1;
-        }
-
-        let mut end = idx;
-        while end < chars.len() && is_word_char(chars[end]) {
-            end += 1;
-        }
-
-        if end == start {
-            end = start + 1;
-        }
-
-        (start + 1, end - start)
-    }
-
     pub fn _print(&self) {
         println!("\n---------------------- \n");
         println!("{}", Self::_format_table(&self.table, 0));
@@ -2023,25 +1937,14 @@ impl SemanticAnalyzer {
     }
 }
 
-pub fn analyze_semantically(stack: Vec<Block>, file_str: Vec<String>, file_name: String, debug: bool) -> Result<Vec<TableTypes>, usize> {
-    let mut semantic_analyzer: SemanticAnalyzer = SemanticAnalyzer::new();
+pub fn analyze_semantically(stack: Vec<Block>, file_name: String, debug: bool) -> Vec<TableTypes> {
+    let mut semantic_analyzer: SemanticAnalyzer = SemanticAnalyzer::new(file_name);
     semantic_analyzer.analyze(stack);
 
     if debug {
         semantic_analyzer._print();
-        println!("{:#?}", semantic_analyzer.table);
+        //println!("{:#?}", semantic_analyzer.table);
     }
 
-    let len = semantic_analyzer.warning_messages.len();
-    if len > 0 {
-        semantic_analyzer.print_errors(file_str.clone(), file_name.clone(), "Warning".to_string());
-    }
-
-    let len = semantic_analyzer.error_messages.len();
-    if len > 0 {
-        semantic_analyzer.print_errors(file_str, file_name, "Error".to_string());
-        return Err(len);
-    }
-
-    Ok(semantic_analyzer.table)
+    semantic_analyzer.table
 }

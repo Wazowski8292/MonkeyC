@@ -1,3 +1,4 @@
+use monkey_c::error_handler;
 use monkey_c::code_generator::generate_assembly;
 use monkey_c::parser::parse_text;
 use monkey_c::semantic_analyzer::analyze_semantically;
@@ -19,6 +20,7 @@ fn main() {
 
     let Some(flags) = parse_parameters(args) else { return };
 
+
     if flags.simple_debug {
         println!("Parsing...");
     }
@@ -31,29 +33,20 @@ fn main() {
         _ => {}
     }
 
+    let (parsed_text, file_str) = parsed_text.expect("parsing failed");
+    
     if flags.simple_debug {
         println!("Analyzing semanticly...");
     }
-    let (parsed_text, file_str) = parsed_text.expect("parsing failed");
-    let type_table = analyze_semantically(parsed_text, file_str, flags.file_name.clone(), flags.semantic_analyzer_debug);
-    match type_table {
-        Err(len) => {
-            println!(
-                "There {} {} compiler error{}. Please fix the compiler error{} before compiling.",
-                { if len == 1 { "is" } else { "are" } },
-                len,
-                { if len == 1 { "" } else { "s" } },
-                { if len == 1 { "" } else { "s" } }
-            );
-            return;
-        }
-        _ => {}
-    }
+    error_handler::with_handler(|h| h.set_source(file_str));
+    let type_table = analyze_semantically(parsed_text, flags.file_name.clone(), flags.semantic_analyzer_debug);
+
+    print_errors_and_warnings();
 
     if flags.simple_debug {
         println!("Translating into a three address code...");
     }
-    let tac = generate_three_address_code(type_table.expect("Compiler errors"), flags.tac_debug);
+    let tac = generate_three_address_code(type_table, flags.tac_debug);
 
     if flags.simple_debug {
         println!("Translating into assembly...");
@@ -176,4 +169,15 @@ fn print_help() {
         
         "
     );
+}
+
+fn print_errors_and_warnings() {
+    if error_handler::with_handler(|h| h.has_warnings()) {
+        error_handler::with_handler(|h| h.print_all_warnings()); 
+        return;
+    }
+    if error_handler::with_handler(|h| h.has_errors()) {
+        error_handler::with_handler(|h| h.print_all_errors()); 
+        return;
+    }
 }
