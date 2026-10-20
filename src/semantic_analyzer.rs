@@ -1,9 +1,12 @@
+mod debug;
+
 use crate::enbeded_funcs::FUNCTIONS;
 use crate::parser::{Block, Word};
+use crate::report;
 use crate::variable_types::{
     Conditional, Function, FunctionCall, InlineAssembly, Loop, PointerType, Reasingment, Return, StructLiteral, Types, Value, Variable,
 };
-use crate::report;
+
 use crate::warn;
 
 use std::vec::Vec;
@@ -446,7 +449,7 @@ impl SemanticAnalyzer {
         let lookup_name = crate::variable_types::parse_array_syntax(&name).map(|(arr_name, _)| arr_name).unwrap_or(name.clone());
         if name.clone().starts_with("self") {
             return Some((0, Scope::Root, ResolveType::Variable));
-        } 
+        }
 
         if let Some(result) = Self::resolve_in_chain(&lookup_name, &mut self.table, 0, self.max_nesting, self.defining_parameters) {
             return Some(result);
@@ -730,7 +733,12 @@ impl SemanticAnalyzer {
                 return;
             }
             TokenType::Assembly => {
-                warn!(self.file_name.clone(), word.line.unwrap_or(0).clone(), word.char_num.unwrap_or(0).clone(), "The Monkey C compiler does not verify asmembly, you must check it by your self and remeber that the asmbler will return an error if it is the case, but it will not go through this compiler") 
+                warn!(
+                    self.file_name.clone(),
+                    word.line.unwrap_or(0).clone(),
+                    word.char_num.unwrap_or(0).clone(),
+                    "The Monkey C compiler does not verify asmembly, you must check it by your self and remeber that the asmbler will return an error if it is the case, but it will not go through this compiler"
+                )
             }
             _ => {}
         }
@@ -795,7 +803,7 @@ impl SemanticAnalyzer {
     }
 
     fn get_if_in_argument(&mut self, in_nested_call: bool, in_reasignment: bool, in_function_call: bool) -> bool {
-       let in_conditional = matches!(self.active_table().last(), Some(TableTypes::Conditional(_))) && self.defining_parameters;
+        let in_conditional = matches!(self.active_table().last(), Some(TableTypes::Conditional(_))) && self.defining_parameters;
         let in_for_loop = matches!(
             self.active_table().last(),
             Some(TableTypes::Loop(loop_node)) if matches!(loop_node.token_type, TokenType::ForLoop)
@@ -819,7 +827,7 @@ impl SemanticAnalyzer {
         }
 
         let in_call = in_reasignment || in_function_call || in_conditional || in_nested_call;
-        
+
         !self.last_finished || self.set_value || self.set_return_value || in_call
     }
 
@@ -1016,7 +1024,9 @@ impl SemanticAnalyzer {
                     self.file_name.clone(),
                     word.line.unwrap_or(0),
                     word.char_num.unwrap_or(0),
-                    "Too many arguments for function call. Expected: {}, Found: {}", expected_fc_params, fc_params_len + 1,
+                    "Too many arguments for function call. Expected: {}, Found: {}",
+                    expected_fc_params,
+                    fc_params_len + 1,
                 );
             } else {
                 self.check_parameters(entry_info, fc_params_len, fc_target);
@@ -1030,12 +1040,7 @@ impl SemanticAnalyzer {
             && !word.word.starts_with("self[")
             && word.word != "self"
         {
-            report!(
-                self.file_name.clone(),
-                word.line.unwrap_or(0),
-                word.char_num.unwrap_or(0),
-                "Undefined symbol: {}", word.word,
-            );
+            report!(self.file_name.clone(), word.line.unwrap_or(0), word.char_num.unwrap_or(0), "Undefined symbol: {}", word.word,);
         }
 
         let rhs_ptr_type = self.ptr_type.clone();
@@ -1074,12 +1079,7 @@ impl SemanticAnalyzer {
                 }
             }
             None => {
-                report!(
-                    self.file_name.clone(),
-                    word.line.unwrap_or(0),
-                    word.char_num.unwrap_or(0),
-                    "There wasn't a last entry",
-                );
+                report!(self.file_name.clone(), word.line.unwrap_or(0), word.char_num.unwrap_or(0), "There wasn't a last entry",);
 
                 return;
             }
@@ -1106,12 +1106,7 @@ impl SemanticAnalyzer {
         let new_entry = match self.active_table().last_mut() {
             Some(entry) => entry,
             None => {
-                report!(
-                    self.file_name.clone(),
-                    word.line.unwrap_or(0),
-                    word.char_num.unwrap_or(0), 
-                    "There wasn't a last entry"
-               );
+                report!(self.file_name.clone(), word.line.unwrap_or(0), word.char_num.unwrap_or(0), "There wasn't a last entry");
                 return;
             }
         };
@@ -1219,13 +1214,12 @@ impl SemanticAnalyzer {
                 report!(
                     self.file_name.clone(),
                     word.line.unwrap_or(0),
-                    word.char_num.unwrap_or(0),                   
+                    word.char_num.unwrap_or(0),
                     "Pointer kind mismatch for argument {} of function call: expected {}, got {}",
                     fc_params_len + 1,
                     expected_str,
                     actual_str,
                 );
-
             }
         }
     }
@@ -1441,9 +1435,11 @@ impl SemanticAnalyzer {
                     report!(
                         self.file_name.clone(),
                         word.line.unwrap_or(0),
-                        word.char_num.unwrap_or(0), 
-                        "'{}' is neither a field nor a method of struct '{}'", word.word, struct_name,
-                   );
+                        word.char_num.unwrap_or(0),
+                        "'{}' is neither a field nor a method of struct '{}'",
+                        word.word,
+                        struct_name,
+                    );
                 }
                 Member::Unresolved => {
                     let reasign = Reasingment {
@@ -1504,12 +1500,7 @@ impl SemanticAnalyzer {
                 self.active_table().push(TableTypes::Reasingment(reasign));
             }
         } else {
-            report!(
-                self.file_name.clone(),
-                word.line.unwrap_or(0),
-                word.char_num.unwrap_or(0),
-                "Undefined symbol: {}", word.word,
-            );
+            report!(self.file_name.clone(), word.line.unwrap_or(0), word.char_num.unwrap_or(0), "Undefined symbol: {}", word.word,);
         }
     }
 
@@ -1784,157 +1775,6 @@ impl SemanticAnalyzer {
             }
         }
     }
-
-    pub fn _print(&self) {
-        println!("\n---------------------- \n");
-        println!("{}", Self::_format_table(&self.table, 0));
-        println!("\n---------------------- \n");
-    }
-
-    fn _format_table(table: &Vec<TableTypes>, level: usize) -> String {
-        table.iter().map(|item| Self::_format_item(item, level)).collect::<Vec<_>>().join("\n")
-    }
-
-    fn _format_item(item: &TableTypes, level: usize) -> String {
-        let p = "    ".repeat(level);
-        match item {
-            TableTypes::Variable(v) => {
-                let array_note = if v.is_array { format!(" [array; size={:?}]", v.array_size) } else { String::new() };
-                format!(
-                    "{p}var {}{}: {:?} = {}{}",
-                    Self::_format_ptr(&v.ptr),
-                    v.name.clone().unwrap_or_else(|| "_".to_string()),
-                    v.token_type,
-                    Self::_format_values(&v.value),
-                    array_note,
-                )
-            }
-
-            TableTypes::Function(f) => {
-                let ret = f.return_type.as_ref().map(|t| t.to_str()).unwrap_or_else(|| "void".to_string());
-                let header = format!("{p}fn {}() -> {} {{", f.name.clone().unwrap_or_else(|| "_".to_string()), ret);
-                let body = Self::_format_table(&f.table, level + 1);
-                format!("{header}\n{body}\n{p}}}")
-            }
-
-            TableTypes::Reasingment(r) => {
-                let params = r
-                    .parameters
-                    .as_ref()
-                    .map(|p| p.iter().map(Self::_format_item_inline).collect::<Vec<_>>().join(", "))
-                    .unwrap_or_default();
-                let idx = r.array_index.as_ref().map(|i| format!("[{}]", i)).unwrap_or_default();
-                format!(
-                    "{p}{}{}{} = {}  ({:?}, scope={:?}, target={})",
-                    Self::_format_ptr(&r.ptr),
-                    r.name,
-                    idx,
-                    params,
-                    r.token_type,
-                    r.target_scope,
-                    r.target,
-                )
-            }
-
-            TableTypes::FunctionCall(fc) => {
-                format!("{p}{}  (scope={:?}, target={})", Self::_format_func_call_inline(fc), fc.scope, fc.target)
-            }
-
-            TableTypes::Conditional(c) => {
-                let kw = if c.token_type == TokenType::Else { "else" } else { "if" };
-                let is_plain = match c.condition.first() {
-                    Some(TableTypes::Variable(v)) => v.value.as_ref().map_or(true, |vals| vals.is_empty()),
-                    _ => false,
-                };
-                let header = if is_plain {
-                    format!("{p}{kw} {{")
-                } else {
-                    let cond = c.condition.iter().map(Self::_format_item_inline).collect::<Vec<_>>().join(" ");
-                    format!("{p}{kw} {} {{", cond)
-                };
-                let body = Self::_format_table(&c.table, level + 1);
-                format!("{header}\n{body}\n{p}}}")
-            }
-
-            TableTypes::Loop(l) => {
-                let cond = l.condition.iter().map(Self::_format_item_inline).collect::<Vec<_>>().join(" ");
-                let header = format!("{p}while {} {{", cond);
-                let body = Self::_format_table(&l.table, level + 1);
-                format!("{header}\n{body}\n{p}}}")
-            }
-
-            TableTypes::Return(r) => {
-                let val = r.value.as_ref().map(|v| Self::_format_values(&v.value)).unwrap_or_else(|| "<none>".to_string());
-                format!("{p}return {}", val)
-            }
-
-            TableTypes::StructLiteral(s) => {
-                let header = format!("{p}struct {} {{", s.name);
-                let mut body = Self::_format_table(&s.arguments, level + 1);
-                if !s.functions.is_empty() {
-                    body.push_str(&format!("\n{p}    -- methods --\n"));
-                    body.push_str(&Self::_format_table(&s.functions, level + 1));
-                }
-                format!("{header}\n{body}\n{p}}}")
-            }
-
-            TableTypes::InlineAssembly(asm) => {
-                format!("asm: {:?}", asm.table)
-            }
-
-            TableTypes::Unknown => {
-                format!("{p}<unknown>")
-            }
-        }
-    }
-
-    fn _format_item_inline(item: &TableTypes) -> String {
-        match item {
-            TableTypes::Variable(v) => {
-                if let Some(name) = &v.name
-                    && name != "_"
-                {
-                    name.clone()
-                } else {
-                    Self::_format_values(&v.value)
-                }
-            }
-            TableTypes::FunctionCall(fc) => Self::_format_func_call_inline(fc),
-            TableTypes::Reasingment(r) => r.name.clone(),
-            _ => "<expr>".to_string(),
-        }
-    }
-
-    fn _format_func_call_inline(fc: &FunctionCall) -> String {
-        let params =
-            fc.parameters.as_ref().map(|p| p.iter().map(Self::_format_item_inline).collect::<Vec<_>>().join(", ")).unwrap_or_default();
-        format!("{}({})", fc.name, params)
-    }
-
-    fn _format_ptr(ptr: &Option<PointerType>) -> &'static str {
-        match ptr {
-            Some(PointerType::Pointer) => "*",
-            Some(PointerType::Reference) => "&",
-            None => "",
-        }
-    }
-
-    fn _format_value(value: &Value) -> String {
-        match value {
-            Value::Var(name) => name.clone(),
-            Value::Deref(name) => format!("*{}", name),
-            Value::Ref(name) => format!("&{}", name),
-            Value::Index(name, idx) => format!("{}[{}]", name, idx),
-            Value::FuncCall(fc) => Self::_format_func_call_inline(fc),
-        }
-    }
-
-    fn _format_values(values: &Option<Vec<Value>>) -> String {
-        match values {
-            Some(v) if !v.is_empty() => v.iter().map(Self::_format_value).collect::<Vec<_>>().join(" "),
-            _ => "<none>".to_string(),
-        }
-    }
 }
 
 pub fn analyze_semantically(stack: Vec<Block>, file_name: String, debug: bool) -> Vec<TableTypes> {
@@ -1942,7 +1782,7 @@ pub fn analyze_semantically(stack: Vec<Block>, file_name: String, debug: bool) -
     semantic_analyzer.analyze(stack);
 
     if debug {
-        semantic_analyzer._print();
+        debug::print(&semantic_analyzer.table.clone());
         //println!("{:#?}", semantic_analyzer.table);
     }
 

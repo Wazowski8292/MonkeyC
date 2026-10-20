@@ -1,5 +1,5 @@
-use monkey_c::error_handler;
 use monkey_c::code_generator::generate_assembly;
+use monkey_c::error_handler;
 use monkey_c::parser::parse_text;
 use monkey_c::semantic_analyzer::analyze_semantically;
 use monkey_c::three_address_code_gen::generate_three_address_code;
@@ -20,7 +20,6 @@ fn main() {
 
     let Some(flags) = parse_parameters(args) else { return };
 
-
     if flags.simple_debug {
         println!("Parsing...");
     }
@@ -34,7 +33,7 @@ fn main() {
     }
 
     let (parsed_text, file_str) = parsed_text.expect("parsing failed");
-    
+
     if flags.simple_debug {
         println!("Analyzing semanticly...");
     }
@@ -173,11 +172,11 @@ fn print_help() {
 
 fn print_errors_and_warnings() {
     if error_handler::with_handler(|h| h.has_warnings()) {
-        error_handler::with_handler(|h| h.print_all_warnings()); 
+        error_handler::with_handler(|h| h.print_all_warnings());
         return;
     }
     if error_handler::with_handler(|h| h.has_errors()) {
-        error_handler::with_handler(|h| h.print_all_errors()); 
+        error_handler::with_handler(|h| h.print_all_errors());
         return;
     }
 }

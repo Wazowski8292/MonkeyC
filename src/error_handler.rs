@@ -11,12 +11,16 @@ pub struct Diagnostic {
 pub struct ErrorHandler {
     source: Vec<String>,
     warnings: Vec<Diagnostic>,
-    errors: Vec<Diagnostic>
+    errors: Vec<Diagnostic>,
 }
 
 impl ErrorHandler {
     pub fn new() -> Self {
-        Self { source: vec![], warnings: Vec::new(), errors: Vec::new() }
+        Self {
+            source: vec![],
+            warnings: Vec::new(),
+            errors: Vec::new(),
+        }
     }
 
     pub fn set_source(&mut self, src: Vec<String>) {
@@ -24,13 +28,23 @@ impl ErrorHandler {
     }
 
     pub fn add_warning(&mut self, line: usize, col: usize, msg: String, file_name: String) {
-        self.warnings.push(Diagnostic {file_name, line, col, msg});
+        self.warnings.push(Diagnostic {
+            file_name,
+            line,
+            col,
+            msg,
+        });
     }
-    
+
     pub fn add_error(&mut self, line: usize, col: usize, msg: String, file_name: String) {
-        self.errors.push(Diagnostic {file_name, line, col, msg});
+        self.errors.push(Diagnostic {
+            file_name,
+            line,
+            col,
+            msg,
+        });
     }
-       
+
     pub fn has_warnings(&self) -> bool {
         !self.warnings.is_empty()
     }
@@ -50,7 +64,7 @@ impl ErrorHandler {
             println!();
         }
     }
-    
+
     fn general_info_print(&self, diagnostic: Diagnostic) {
         let error_line = (diagnostic.line - 1) as usize;
         let total_lines = self.source.len();
@@ -112,7 +126,7 @@ impl ErrorHandler {
     pub fn print_all_errors(&self) {
         let len = self.errors.len();
         self.print_diagnostics(self.errors.clone(), "Warning".to_string());
-        
+
         println!(
             "There {} {} compiler error{}. Please fix the compiler error{} before compiling.",
             { if len == 1 { "is" } else { "are" } },
