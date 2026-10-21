@@ -13,6 +13,8 @@ check:
 debug:
 	cargo build
 	cargo run $(FILE) -dd
-
 clean: 
 	cargo clean
+test: 
+	cargo test
+

@@ -1,5 +1,8 @@
 mod debug;
 mod normalize;
+mod asm;
+mod resolve;
+mod cursor;
 pub mod table;
 pub mod tokens;
 
@@ -11,7 +14,7 @@ use crate::parser::{Block, Word};
 use crate::report;
 use crate::warn;
 use crate::variable_types::{
-    Function, FunctionCall, InlineAssembly, PointerType, Reasingment, Types, Value, Variable,
+    FunctionCall, PointerType, Reasingment, Types, Value, Variable,
 };
 use std::vec::Vec;
 
@@ -59,44 +62,6 @@ impl SemanticAnalyzer {
         }
     }
 
-    fn push_word(asm: &mut InlineAssembly, word: &str) {
-        match asm.table.last_mut() {
-            Some(last) => {
-                if !last.is_empty() {
-                    last.push(' ');
-                }
-                last.push_str(word);
-            }
-            None => asm.table.push(word.to_string()),
-        }
-    }
-
-    fn add_inline_asm(asm: &mut InlineAssembly, block: Block) {
-        match block {
-            Block::Word(word) => Self::push_word(asm, &word.word),
-            Block::Line(line) => {
-                asm.table.push(String::new());
-                for word in line {
-                    Self::push_word(asm, &word.word)
-                }
-            }
-            Block::Multiple(multiple) => {
-                for line in multiple {
-                    asm.table.push(String::new());
-                    for word in line {
-                        Self::push_word(asm, &word.word);
-                    }
-                }
-            }
-            Block::Collection(collection) => {
-                for block in collection {
-                    Self::add_inline_asm(asm, block);
-                }
-            }
-            _ => {}
-        }
-    }
-
     pub fn analyze(&mut self, stack: Vec<Block>) {
         for block in stack.iter() {
             match block {
@@ -114,7 +79,7 @@ impl SemanticAnalyzer {
                 Block::Collection(blocks) => {
                     if let Some(TableTypes::InlineAssembly(asm)) = self.active_table().last_mut() {
                         for block in blocks {
-                            Self::add_inline_asm(asm, block.clone());
+                            asm::add_inline_asm(asm, block.clone());
                         }
                     } else {
                         self.max_nesting += 1;
@@ -138,164 +103,6 @@ impl SemanticAnalyzer {
         }
     }
 
-    fn resolve(&mut self, name: String) -> Option<(usize, Scope, ResolveType)> {
-        let lookup_name = crate::variable_types::parse_array_syntax(&name).map(|(arr_name, _)| arr_name).unwrap_or(name.clone());
-        if name.clone().starts_with("self") {
-            return Some((0, Scope::Root, ResolveType::Variable));
-        }
-
-        if let Some(result) = Self::resolve_in_chain(&lookup_name, &mut self.table, 0, self.max_nesting, self.defining_parameters) {
-            return Some(result);
-        } else {
-            return self.resolve_in_parameters(&lookup_name);
-        }
-    }
-
-    fn is_enbeded_func(name: String) -> (bool, usize) {
-        let mut i = 0;
-        for func in FUNCTIONS.iter() {
-            if func.name == name {
-                return (true, i);
-            }
-
-            i += 1;
-        }
-
-        (false, 0)
-    }
-
-    fn find_in_level(name: &str, table: &Vec<TableTypes>, nest_level: usize) -> Option<(usize, Scope, ResolveType)> {
-        let (is_enbeded_func, index) = Self::is_enbeded_func(name.to_string());
-        table.iter().enumerate().find_map(|(idx, entry)| match entry {
-            TableTypes::Variable(v) if v.name.as_deref() == Some(name) => {
-                Some((idx, Self::scope_for_level(nest_level), ResolveType::Variable))
-            }
-            TableTypes::Function(f) if f.name.as_deref() == Some(name) => {
-                Some((idx, Self::scope_for_level(nest_level), ResolveType::Function))
-            }
-            TableTypes::StructLiteral(s) if s.name == name => Some((idx, Self::scope_for_level(nest_level), ResolveType::Struct)),
-            _ if is_enbeded_func => Some((index, Scope::EnbedFunc, ResolveType::Function)),
-            _ => None,
-        })
-    }
-
-    fn scope_for_level(nest_level: usize) -> Scope {
-        if nest_level == 0 { Scope::Root } else { Scope::Function }
-    }
-
-    fn should_descend(table: &Vec<TableTypes>, current_nest_level: usize, max_nesting: usize, defining_parameters: bool) -> bool {
-        let has_child = matches!(
-            table.last(),
-            Some(TableTypes::Function(_))
-                | Some(TableTypes::Conditional(_))
-                | Some(TableTypes::Loop(_))
-                | Some(TableTypes::StructLiteral(_))
-        );
-        if !has_child {
-            return false;
-        }
-
-        let nesting_exhausted = (current_nest_level + 1 > max_nesting) && !defining_parameters;
-        let blocked_by_params = defining_parameters && matches!(table.last(), Some(TableTypes::Conditional(_))); //Some(TableTypes::Loop(_)));
-
-        !nesting_exhausted && !blocked_by_params
-    }
-
-    fn find_loop_var(table: &Vec<TableTypes>, name: &str) -> Option<(usize, Scope, ResolveType)> {
-        match table.last() {
-            Some(TableTypes::Conditional(c)) => Self::find_loop_var(&c.table, name),
-            Some(TableTypes::Loop(l)) => {
-                // innermost loop first, so an inner variable shadows an outer one
-                Self::find_loop_var(&l.table, name).or_else(|| {
-                    if l.condition.len() > 1 {
-                        if let Some(TableTypes::Variable(v)) = l.condition.first() {
-                            if v.name.as_deref() == Some(name) {
-                                return Some((0, Scope::Parameter, ResolveType::Variable));
-                            }
-                        }
-                    }
-                    None
-                })
-            }
-            _ => None,
-        }
-    }
-
-    fn descend_and_resolve(
-        name: &str, table: &mut Vec<TableTypes>, current_nest_level: usize, max_nesting: usize, defining_parameters: bool,
-    ) -> Option<(usize, Scope, ResolveType)> {
-        match table.last_mut().unwrap() {
-            TableTypes::Function(func) => {
-                if defining_parameters && func.table.is_empty() {
-                    None
-                } else {
-                    Self::resolve_in_chain(name, &mut func.table, current_nest_level + 1, max_nesting, defining_parameters)
-                }
-            }
-            TableTypes::Conditional(con) => {
-                Self::resolve_in_chain(name, &mut con.table, current_nest_level + 1, max_nesting, defining_parameters)
-            }
-            TableTypes::Loop(while_loop) => {
-                if defining_parameters && while_loop.table.is_empty() {
-                    None
-                } else {
-                    Self::resolve_in_chain(name, &mut while_loop.table, current_nest_level + 1, max_nesting, defining_parameters)
-                }
-            }
-            TableTypes::StructLiteral(struct_def) => {
-                Self::resolve_in_chain(name, &mut struct_def.functions, current_nest_level + 1, max_nesting, defining_parameters)
-            }
-            _ => unreachable!(),
-        }
-    }
-
-    fn resolve_in_chain(
-        name: &str, table: &mut Vec<TableTypes>, current_nest_level: usize, max_nesting: usize, defining_parameters: bool,
-    ) -> Option<(usize, Scope, ResolveType)> {
-        if Self::should_descend(table, current_nest_level, max_nesting, defining_parameters) {
-            if let Some(found) = Self::descend_and_resolve(name, table, current_nest_level, max_nesting, defining_parameters) {
-                return Some(found);
-            }
-        }
-
-        Self::find_in_level(name, table, current_nest_level)
-    }
-
-    fn resolve_in_parameters(&self, name: &str) -> Option<(usize, Scope, ResolveType)> {
-        if !self.defining_fn {
-            return None;
-        }
-
-        match self.table.last() {
-            Some(TableTypes::Function(f)) => {
-                if let Some(found) = Self::find_loop_var(&f.table, name) {
-                    return Some(found);
-                }
-
-                let params = f.parameters.as_ref()?;
-                params.iter().enumerate().find_map(|(idx, entry)| match entry {
-                    TableTypes::Variable(v) if v.name.as_deref() == Some(name) => Some((idx, Scope::Parameter, ResolveType::Variable)),
-                    _ => None,
-                })
-            }
-            Some(TableTypes::Loop(looping)) => {
-                if looping.condition.len() > 1 {
-                    if let TableTypes::Variable(variable) = &looping.condition[0] {
-                        if variable.name.as_deref() == Some(name) {
-                            return Some((0, Scope::Parameter, ResolveType::Variable));
-                        }
-
-                        return None;
-                    }
-                    None
-                } else {
-                    None
-                }
-            }
-            _ => None,
-        }
-    }
-
     fn add_entry(&mut self, token: TokenType) {
         let mut table_type: TableTypes = TableTypes::from_token(token.clone());
         match table_type {
@@ -307,89 +114,6 @@ impl SemanticAnalyzer {
         self.defining_fn |= token == TokenType::FnLiteral;
 
         self.active_table().push(table_type)
-    }
-
-    fn active_table(&mut self) -> &mut Vec<TableTypes> {
-        Self::desend_table(self.defining_parameters, self.defining_fn, &mut self.table, 1, self.max_nesting)
-    }
-
-    fn desend_table(
-        defining_parameters: bool, defining_fn: bool, last_table: &mut Vec<TableTypes>, current_nest_level: usize, max_nesting: usize,
-    ) -> &mut Vec<TableTypes> {
-        if let Some(entry) = last_table.last() {
-            if Self::pending_call_in(entry).is_some() {
-                return last_table;
-            }
-        }
-
-        let has_child = matches!(
-            last_table.last(),
-            Some(TableTypes::Function(_))
-                | Some(TableTypes::Conditional(_))
-                | Some(TableTypes::Loop(_))
-                | Some(TableTypes::StructLiteral(_))
-        );
-
-        if !has_child || (current_nest_level == max_nesting) && !defining_parameters {
-            return last_table;
-        }
-
-        if defining_parameters && max_nesting == current_nest_level {
-            if let Some(TableTypes::Conditional(_)) = last_table.last() {
-                return last_table;
-            } else if let Some(TableTypes::Loop(_)) = last_table.last() {
-                return last_table;
-            }
-        }
-
-        match last_table.last_mut().unwrap() {
-            TableTypes::Function(func) => {
-                if defining_parameters && func.table.is_empty() {
-                    func.parameters.get_or_insert_with(Vec::new)
-                } else {
-                    Self::desend_table(defining_parameters, defining_fn, &mut func.table, current_nest_level + 1, max_nesting)
-                }
-            }
-            TableTypes::Conditional(con) => {
-                Self::desend_table(defining_parameters, defining_fn, &mut con.table, current_nest_level + 1, max_nesting)
-            }
-            TableTypes::Loop(while_loop) => {
-                Self::desend_table(defining_parameters, defining_fn, &mut while_loop.table, current_nest_level + 1, max_nesting)
-            }
-            TableTypes::StructLiteral(struct_literal) => {
-                if defining_fn {
-                    Self::desend_table(defining_parameters, defining_fn, &mut struct_literal.functions, current_nest_level + 1, max_nesting)
-                } else {
-                    Self::desend_table(defining_parameters, defining_fn, &mut struct_literal.arguments, current_nest_level + 1, max_nesting)
-                }
-            }
-            _ => unreachable!(),
-        }
-    }
-
-    fn current_function(&self) -> Option<&Function> {
-        match self.table.last() {
-            Some(TableTypes::Function(f)) => Some(f),
-            Some(TableTypes::StructLiteral(s)) if self.defining_fn => match s.functions.last() {
-                Some(TableTypes::Function(f)) => Some(f),
-                _ => None,
-            },
-            _ => None,
-        }
-    }
-
-    fn callee_table(&self, name: &str) -> (&Vec<TableTypes>, bool) {
-        if let Some((struct_name, _)) = name.split_once('.') {
-            for t in &self.table {
-                if let TableTypes::StructLiteral(s) = t
-                    && s.name == struct_name
-                {
-                    return (&s.functions, true);
-                }
-            }
-        }
-
-        (&self.table, false)
     }
 
     fn tokenize_word(&mut self, mut word: Word) {
@@ -627,70 +351,6 @@ impl SemanticAnalyzer {
                 _ => None,
             },
             _ => None,
-        }
-    }
-
-    fn active_table_ref(&self) -> &Vec<TableTypes> {
-        Self::descend_table_ref(self.defining_parameters, self.defining_fn, &self.table, 1, self.max_nesting)
-    }
-
-    fn descend_table_ref<'a>(
-        defining_parameters: bool, defining_fn: bool, last_table: &'a Vec<TableTypes>, current_nest_level: usize, max_nesting: usize,
-    ) -> &'a Vec<TableTypes> {
-        let has_child = matches!(
-            last_table.last(),
-            Some(TableTypes::Function(_))
-                | Some(TableTypes::Conditional(_))
-                | Some(TableTypes::Loop(_))
-                | Some(TableTypes::StructLiteral(_))
-        );
-
-        if !has_child || (current_nest_level == max_nesting) && !defining_parameters {
-            return last_table;
-        }
-
-        if defining_parameters && max_nesting == current_nest_level {
-            if let Some(TableTypes::Conditional(_)) = last_table.last() {
-                return last_table;
-            } else if let Some(TableTypes::Loop(_)) = last_table.last() {
-                return last_table;
-            }
-        }
-
-        match last_table.last().unwrap() {
-            TableTypes::Function(func) => {
-                if defining_parameters && func.table.is_empty() {
-                    func.parameters.as_ref().map(|p| p as &Vec<TableTypes>).unwrap_or(last_table)
-                } else {
-                    Self::descend_table_ref(defining_parameters, defining_fn, &func.table, current_nest_level + 1, max_nesting)
-                }
-            }
-            TableTypes::Conditional(con) => {
-                Self::descend_table_ref(defining_parameters, defining_fn, &con.table, current_nest_level + 1, max_nesting)
-            }
-            TableTypes::Loop(while_loop) => {
-                Self::descend_table_ref(defining_parameters, defining_fn, &while_loop.table, current_nest_level + 1, max_nesting)
-            }
-            TableTypes::StructLiteral(struct_literal) => {
-                if defining_fn {
-                    Self::descend_table_ref(
-                        defining_parameters,
-                        defining_fn,
-                        &struct_literal.functions,
-                        current_nest_level + 1,
-                        max_nesting,
-                    )
-                } else {
-                    Self::descend_table_ref(
-                        defining_parameters,
-                        defining_fn,
-                        &struct_literal.arguments,
-                        current_nest_level + 1,
-                        max_nesting,
-                    )
-                }
-            }
-            _ => unreachable!(),
         }
     }
 
@@ -1377,7 +1037,7 @@ impl SemanticAnalyzer {
         }
     }
 
-   fn self_field_index(&self, field: &str) -> Option<usize> {
+    fn self_field_index(&self, field: &str) -> Option<usize> {
         let Some(TableTypes::StructLiteral(s)) = self.table.last() else { return None };
         s.arguments.iter().position(|a| matches!(a, TableTypes::Variable(v) if v.name.as_deref() == Some(field)))
     }

@@ -40,7 +40,9 @@ fn main() {
     error_handler::with_handler(|h| h.set_source(file_str));
     let type_table = analyze_semantically(parsed_text, flags.file_name.clone(), flags.semantic_analyzer_debug);
 
-    print_errors_and_warnings();
+    if print_errors_and_warnings() {
+        return;
+    }
 
     if flags.simple_debug {
         println!("Translating into a three address code...");
@@ -170,13 +172,14 @@ fn print_help() {
     );
 }
 
-fn print_errors_and_warnings() {
+fn print_errors_and_warnings() -> bool {
     if error_handler::with_handler(|h| h.has_warnings()) {
         error_handler::with_handler(|h| h.print_all_warnings());
-        return;
     }
     if error_handler::with_handler(|h| h.has_errors()) {
         error_handler::with_handler(|h| h.print_all_errors());
-        return;
+        return true;
     }
+
+    false
 }
