@@ -1,17 +1,21 @@
 mod debug;
+mod normalize;
+pub mod table;
+pub mod tokens;
+
+pub use table::*;
+pub use tokens::*; 
 
 use crate::enbeded_funcs::FUNCTIONS;
 use crate::parser::{Block, Word};
 use crate::report;
-use crate::variable_types::{
-    Conditional, Function, FunctionCall, InlineAssembly, Loop, PointerType, Reasingment, Return, StructLiteral, Types, Value, Variable,
-};
-
 use crate::warn;
-
+use crate::variable_types::{
+    Function, FunctionCall, InlineAssembly, PointerType, Reasingment, Types, Value, Variable,
+};
 use std::vec::Vec;
 
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 enum Modifiers {
     InForLoop,
     StandAloneStructCall,
@@ -24,317 +28,6 @@ struct Entry {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum TokenType {
-    If,
-    Else,
-
-    Int,
-    Float,
-    Double,
-    Bool,
-    Char,
-    String,
-
-    Plus,
-    Minus,
-    Multiplication,
-    Division,
-    Equals,
-    PlusEquals,
-    MinusEquals,
-    PlusPlus,
-    MinusMinus,
-
-    LogicalEquals,
-    NotEquals,
-    GreaterThan,
-    LessThan,
-    LogicalAnd,
-    LogicalOr,
-    Not,
-
-    RightBitShift,
-    LeftBitShift,
-    And,
-    Or,
-
-    IntegerLiteral,
-    FloatLiteral,
-    DoubleLiteral,
-    CharLiteral,
-    StringLiteral,
-    BoolLiteral,
-
-    FnLiteral,
-    Return,
-    ReturnType,
-
-    StructLiteral,
-    StructDef(String),
-
-    WhileLoop,
-
-    Assembly,
-
-    ForLoop,
-    DoWhileLoop,
-
-    Dots,
-    Unknow,
-}
-
-impl TokenType {
-    pub fn from_str(s: &str) -> Self {
-        match s {
-            "if" => TokenType::If,
-            "else" => TokenType::Else,
-
-            "int" => TokenType::Int,
-            "float" => TokenType::Float,
-            "double" => TokenType::Double,
-            "str" => TokenType::String,
-            "bool" => TokenType::Bool,
-            "char" => TokenType::Char,
-
-            "+" => TokenType::Plus,
-            "-" => TokenType::Minus,
-            "*" => TokenType::Multiplication,
-            "/" => TokenType::Division,
-            "=" => TokenType::Equals,
-            "+=" => TokenType::PlusEquals,
-            "-=" => TokenType::MinusEquals,
-            "++" => TokenType::PlusPlus,
-            "--" => TokenType::MinusMinus,
-
-            "==" => TokenType::LogicalEquals,
-            "!=" => TokenType::NotEquals,
-            ">" => TokenType::GreaterThan,
-            "<" => TokenType::LessThan,
-            "&&" => TokenType::LogicalAnd,
-            "||" => TokenType::LogicalOr,
-            "!" => TokenType::Not,
-
-            ">>" => TokenType::RightBitShift,
-            "<<" => TokenType::LeftBitShift,
-            "&" => TokenType::And,
-            "|" => TokenType::Or,
-
-            "fn" => TokenType::FnLiteral,
-            "return" => TokenType::Return,
-            "->" => TokenType::ReturnType,
-
-            "struct" => TokenType::StructLiteral,
-
-            "while" => TokenType::WhileLoop,
-            "for" => TokenType::ForLoop,
-            "do" => TokenType::DoWhileLoop,
-
-            "::" => TokenType::Dots,
-
-            "asm" => TokenType::Assembly,
-
-            "true" | "false" => TokenType::BoolLiteral,
-
-            _ if s.parse::<i64>().is_ok() => TokenType::IntegerLiteral,
-            _ if (s.ends_with('f') || s.ends_with('F')) && s[..s.len() - 1].parse::<f32>().is_ok() => TokenType::FloatLiteral,
-            _ if s.parse::<f64>().is_ok() => TokenType::DoubleLiteral,
-            _ if s.len() >= 2 && s.starts_with('"') && s.ends_with('"') => TokenType::StringLiteral,
-            _ if s.len() >= 3 && s.starts_with('\'') && s.ends_with('\'') => TokenType::CharLiteral,
-
-            _ => TokenType::Unknow,
-        }
-    }
-
-    pub fn to_str(&self) -> String {
-        match self {
-            TokenType::If => "if".to_string(),
-            TokenType::Else => "else".to_string(),
-
-            TokenType::Int => "int".to_string(),
-            TokenType::Float => "float".to_string(),
-            TokenType::Double => "double".to_string(),
-            TokenType::String => "str".to_string(),
-            TokenType::Bool => "bool".to_string(),
-            TokenType::Char => "char".to_string(),
-
-            TokenType::Plus => "+".to_string(),
-            TokenType::Minus => "-".to_string(),
-            TokenType::Multiplication => "*".to_string(),
-            TokenType::Division => "/".to_string(),
-            TokenType::Equals => "=".to_string(),
-            TokenType::PlusEquals => "+=".to_string(),
-            TokenType::MinusEquals => "-=".to_string(),
-            TokenType::PlusPlus => "++".to_string(),
-            TokenType::MinusMinus => "--".to_string(),
-
-            TokenType::LogicalEquals => "==".to_string(),
-            TokenType::NotEquals => "!=".to_string(),
-            TokenType::GreaterThan => ">".to_string(),
-            TokenType::LessThan => "<".to_string(),
-            TokenType::LogicalAnd => "&&".to_string(),
-            TokenType::LogicalOr => "||".to_string(),
-            TokenType::Not => "!".to_string(),
-
-            TokenType::RightBitShift => ">>".to_string(),
-            TokenType::LeftBitShift => "<<".to_string(),
-            TokenType::And => "&".to_string(),
-            TokenType::Or => "|".to_string(),
-
-            TokenType::FnLiteral => "fn".to_string(),
-            TokenType::Return => "return".to_string(),
-            TokenType::ReturnType => "->".to_string(),
-
-            TokenType::StructLiteral => "struct".to_string(),
-            TokenType::StructDef(name) => format!("struct type of {}", name.clone()),
-
-            TokenType::WhileLoop => "while".to_string(),
-            TokenType::ForLoop => "for".to_string(),
-            TokenType::DoWhileLoop => "do".to_string(),
-
-            TokenType::IntegerLiteral => "<integer literal>".to_string(),
-            TokenType::FloatLiteral => "<float literal>".to_string(),
-            TokenType::DoubleLiteral => "<double literal>".to_string(),
-            TokenType::StringLiteral => "<string literal>".to_string(),
-            TokenType::CharLiteral => "<char literal>".to_string(),
-            TokenType::BoolLiteral => "<bool literal>".to_string(),
-
-            TokenType::Dots => "::".to_string(),
-
-            TokenType::Assembly => "asm".to_string(),
-
-            TokenType::Unknow => "<unknown>".to_string(),
-        }
-    }
-
-    pub fn is_value(token: TokenType) -> bool {
-        token == TokenType::Unknow
-            || token == TokenType::IntegerLiteral
-            || token == TokenType::FloatLiteral
-            || token == TokenType::DoubleLiteral
-            || token == TokenType::BoolLiteral
-            || token == TokenType::StringLiteral
-            || token == TokenType::CharLiteral
-    }
-
-    pub fn is_operator(token: TokenType) -> bool {
-        TokenType::is_aritmetic_operator(token.clone())
-            || TokenType::is_binary_operator(token.clone())
-            || TokenType::is_logical_operator(token.clone())
-    }
-
-    pub fn is_logical_operator(token: TokenType) -> bool {
-        token == TokenType::LogicalEquals
-            || token == TokenType::NotEquals
-            || token == TokenType::GreaterThan
-            || token == TokenType::LessThan
-            || token == TokenType::LogicalAnd
-            || token == TokenType::LogicalOr
-            || token == TokenType::Not
-    }
-
-    pub fn is_aritmetic_operator(token: TokenType) -> bool {
-        token == TokenType::Plus
-            || token == TokenType::Minus
-            || token == TokenType::Multiplication
-            || token == TokenType::Division
-            || token == TokenType::Equals
-            || token == TokenType::PlusEquals
-            || token == TokenType::MinusEquals
-            || token == TokenType::PlusPlus
-            || token == TokenType::MinusMinus
-    }
-
-    pub fn is_binary_operator(token: TokenType) -> bool {
-        token == TokenType::RightBitShift || token == TokenType::LeftBitShift || token == TokenType::And || token == TokenType::Or
-    }
-
-    pub fn literal_type(&self) -> Option<TokenType> {
-        match self {
-            TokenType::IntegerLiteral => Some(TokenType::Int),
-            TokenType::FloatLiteral => Some(TokenType::Float),
-            TokenType::DoubleLiteral => Some(TokenType::Double),
-            TokenType::StringLiteral => Some(TokenType::String),
-            TokenType::CharLiteral => Some(TokenType::Char),
-            TokenType::BoolLiteral => Some(TokenType::Bool),
-            TokenType::Int | TokenType::Float | TokenType::Double | TokenType::String | TokenType::Bool | TokenType::Char => {
-                Some(self.clone())
-            }
-            _ => None,
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub enum Scope {
-    Root,
-    Function,
-    Parameter,
-    EnbedFunc,
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum TableTypes {
-    Variable(Variable),
-    Function(Function),
-    Reasingment(Reasingment),
-    FunctionCall(FunctionCall),
-    Conditional(Conditional),
-    Loop(Loop),
-    Return(Return),
-    StructLiteral(StructLiteral),
-    InlineAssembly(InlineAssembly),
-    Unknown,
-}
-
-impl TableTypes {
-    pub fn from_token(token: TokenType) -> Self {
-        if TokenType::is_operator(token.clone()) {
-            return TableTypes::Variable(Variable::new(token));
-        }
-
-        match token {
-            TokenType::FnLiteral => TableTypes::Function(Function::new(token)),
-            TokenType::Return => TableTypes::Return(Return::new(token)),
-            TokenType::If | TokenType::Else => TableTypes::Conditional(Conditional::new(token)),
-            TokenType::WhileLoop | TokenType::ForLoop | TokenType::DoWhileLoop => TableTypes::Loop(Loop::new(token)),
-            TokenType::Unknow => TableTypes::Reasingment(Reasingment::new(TokenType::Unknow)),
-            TokenType::Int
-            | TokenType::Float
-            | TokenType::Double
-            | TokenType::Bool
-            | TokenType::Char
-            | TokenType::String
-            | TokenType::StructDef(_) => TableTypes::Variable(Variable::new(token)),
-            TokenType::StructLiteral => TableTypes::StructLiteral(StructLiteral::new(token)),
-            TokenType::Assembly => TableTypes::InlineAssembly(InlineAssembly::new(token)),
-            _ if TokenType::is_value(token.clone()) && token.clone() != TokenType::Unknow => TableTypes::Variable(Variable::new(token)),
-            _ => TableTypes::Unknown,
-        }
-    }
-
-    fn add_arguments(&mut self, argument: String) {
-        match self {
-            TableTypes::Variable(var) => var.add_arguments(argument),
-            TableTypes::Function(fun) => fun.add_arguments(argument),
-            TableTypes::Reasingment(reasing) => reasing.add_arguments(argument),
-            TableTypes::FunctionCall(fc) => fc.add_arguments(argument),
-            TableTypes::Conditional(con) => con.add_arguments(argument),
-            TableTypes::Loop(while_loop) => while_loop.add_arguments(argument),
-            TableTypes::Return(returns) => returns.add_arguments(argument),
-            TableTypes::StructLiteral(struct_literal) => struct_literal.add_arguments(argument),
-            TableTypes::InlineAssembly(asm) => asm.add_arguments(argument),
-            _ => {}
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Clone)]
-enum ResolveType {
-    Variable,
-    Function,
-    Struct,
-}
-
 struct SemanticAnalyzer {
     file_name: String,
     table: Vec<TableTypes>,
@@ -1651,129 +1344,42 @@ impl SemanticAnalyzer {
     }
 
     fn tokenize_line(&mut self, line: &Vec<Word>) {
+        self.update_line_flags();
+
+        let Some(mut words) = normalize::normalize_line(line) else { return };
+        self.rewrite_self_fields(&mut words);
+
+        for word in words {
+            self.tokenize_word(word);
+            self.last_finished = false;
+        }
+    }
+
+    fn update_line_flags(&mut self) {
         if self.set_value || self.set_return_value {
             self.last_finished = false;
         } else {
             self.last_finished = !self.defining_parameters;
             self.set_value = false;
         }
+    }
 
-        let mut normalized_words: Vec<Word> = Vec::new();
-        let mut counter = 0;
-        while counter < line.len() {
-            let w = line[counter].clone();
-
-            if w.clone().word.is_empty() {
-                return;
-            } else if !self.expand_limiters(line, &mut w.clone(), &mut counter) {
-                continue;
-            }
-            self.expand_signs(&mut normalized_words, w);
-        }
-
+    fn rewrite_self_fields(&self, words: &mut Vec<Word>) {
         let mut i = 0;
-        while i + 2 < normalized_words.len() {
-            if normalized_words[i].word == "self" && normalized_words[i + 1].word == "::" {
-                if let Some(pos) = self.self_field_index(&normalized_words[i + 2].word) {
-                    normalized_words[i].word = format!("self[{}]", pos);
-                    normalized_words.drain(i + 1..i + 3);
+        while i + 2 < words.len() {
+            if words[i].word == "self" && words[i + 1].word == "::" {
+                if let Some(pos) = self.self_field_index(&words[i + 2].word) {
+                    words[i].word = format!("self[{}]", pos);
+                    words.drain(i + 1..i + 3);
                 }
             }
             i += 1;
         }
-
-        for word in normalized_words {
-            self.tokenize_word(word);
-            self.last_finished = false;
-        }
     }
 
-    fn self_field_index(&self, field: &str) -> Option<usize> {
+   fn self_field_index(&self, field: &str) -> Option<usize> {
         let Some(TableTypes::StructLiteral(s)) = self.table.last() else { return None };
         s.arguments.iter().position(|a| matches!(a, TableTypes::Variable(v) if v.name.as_deref() == Some(field)))
-    }
-
-    fn expand_limiters(&self, line: &Vec<Word>, w: &mut Word, counter: &mut usize) -> bool {
-        if w.word.len() > 1 && w.word.ends_with(',') && !w.word.starts_with('"') {
-            w.word.pop();
-        }
-
-        if w.word == "," {
-            *counter += 1;
-            return false;
-        }
-
-        if *counter + 3 < line.len() && line[*counter + 1].word == "[" && line[*counter + 3].word == "]" {
-            w.word = format!("{}[{}]", w.word, line[*counter + 2].word);
-            *counter += 4;
-        } else if *counter + 1 < line.len() && line[*counter + 1].word.starts_with('[') && line[*counter + 1].word.ends_with(']') {
-            w.word = format!("{}{}", w.word, line[*counter + 1].word);
-            *counter += 2;
-        } else {
-            *counter += 1;
-        }
-
-        true
-    }
-
-    fn expand_signs(&self, mut normalized_words: &mut Vec<Word>, w: Word) {
-        let mut was_modified = false;
-
-        if w.word.len() > 2 && w.word.ends_with("++") {
-            let mut var_word = w.clone();
-            var_word.word = w.word[..w.word.len() - 2].to_string();
-            let mut op_word = w.clone();
-            op_word.word = "++".to_string();
-            normalized_words.push(var_word);
-            normalized_words.push(op_word);
-
-            was_modified = true;
-        }
-        if w.word.len() > 2 && w.word.ends_with("--") {
-            let mut var_word = w.clone();
-            var_word.word = w.word[..w.word.len() - 2].to_string();
-            let mut op_word = w.clone();
-            op_word.word = "--".to_string();
-            normalized_words.push(var_word);
-            normalized_words.push(op_word);
-
-            was_modified = true;
-        }
-
-        if w.word.contains("::") {
-            self.separete_line_by(&mut normalized_words, w.clone(), "::".to_string());
-
-            was_modified = true;
-        }
-
-        if !was_modified {
-            normalized_words.push(w);
-        }
-    }
-
-    fn separete_line_by(&self, normalized_words: &mut Vec<Word>, w: Word, seperator: String) {
-        let parts: Vec<&str> = w.word.split(&seperator).collect();
-        let n = parts.len();
-        let mut char_count = 0;
-
-        for (i, word) in parts.iter().enumerate() {
-            normalized_words.push(Word {
-                word: word.to_string(),
-                line: w.line,
-                char_num: Some(w.char_num.unwrap_or(0) + char_count),
-            });
-
-            char_count += word.len();
-
-            if i < n - 1 {
-                normalized_words.push(Word {
-                    word: seperator.clone(),
-                    line: w.line,
-                    char_num: Some(w.char_num.unwrap_or(0) + char_count),
-                });
-                char_count += 2;
-            }
-        }
     }
 }
 

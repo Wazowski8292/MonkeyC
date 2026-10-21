@@ -1,4 +1,5 @@
-use crate::semantic_analyzer::{FunctionCall, PointerType, TableTypes, TokenType, Value};
+use crate::variable_types::{FunctionCall, PointerType, Value};
+use super::{TableTypes, TokenType};
 
 pub fn print(table: &[TableTypes]) {
     println!("\n---------------------- \n");

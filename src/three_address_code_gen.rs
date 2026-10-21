@@ -778,7 +778,7 @@ impl ThreeAddressCodeGenerator {
     fn is_plain_else(cond: &Conditional) -> bool {
         match cond.condition.first() {
             Some(TableTypes::Variable(v)) => {
-                matches!(v.token_type, crate::semantic_analyzer::TokenType::BoolLiteral)
+                matches!(v.token_type, TokenType::BoolLiteral)
                     && v.name.as_deref() == Some("_")
                     && v.value.as_ref().map_or(true, |vals| vals.is_empty())
             }
