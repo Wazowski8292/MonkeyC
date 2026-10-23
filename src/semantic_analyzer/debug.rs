@@ -1,5 +1,5 @@
-use crate::variable_types::{FunctionCall, PointerType, Value};
 use super::{TableTypes, TokenType};
+use crate::variable_types::{FunctionCall, PointerType, Value};
 
 pub fn print(table: &[TableTypes]) {
     println!("\n---------------------- \n");

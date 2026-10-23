@@ -1,8 +1,7 @@
-use crate::variable_types::{
-    Conditional, Function, FunctionCall, InlineAssembly, Loop, Reasingment, Return, StructLiteral,
-    Types, Variable,
-};
 use super::tokens::TokenType;
+use crate::variable_types::{
+    Conditional, Function, FunctionCall, InlineAssembly, Loop, Reasingment, Return, StructLiteral, Types, Variable,
+};
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Scope {

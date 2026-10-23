@@ -1,24 +1,22 @@
-mod debug;
-mod normalize;
-mod asm;
-mod resolve;
-mod cursor;
-mod members;
-mod checks;
-mod new_entry;
 mod add_arguments;
+mod asm;
+mod checks;
+mod cursor;
+mod debug;
+mod members;
+mod new_entry;
+mod normalize;
+mod resolve;
 pub mod table;
 pub mod tokens;
 
 pub use table::*;
-pub use tokens::*; 
+pub use tokens::*;
 
 use crate::enbeded_funcs::FUNCTIONS;
 use crate::parser::{Block, Word};
+use crate::variable_types::{FunctionCall, PointerType};
 use crate::warn;
-use crate::variable_types::{
-    FunctionCall, PointerType,
-};
 use std::vec::Vec;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -233,8 +231,8 @@ impl SemanticAnalyzer {
 
         let entry = Entry {
             word: word.clone(),
-            token: token,
-            index: index,
+            token,
+            index,
         };
 
         let in_reasignment = matches!(self.active_table().last(), Some(TableTypes::Reasingment(_))) && !self.last_finished;

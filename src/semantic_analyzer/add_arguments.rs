@@ -1,6 +1,6 @@
-use super::{SemanticAnalyzer, TableTypes, ResolveType, Entry, TokenType, Scope, Modifiers, Word};
-use crate::variable_types::{FunctionCall, Variable, PointerType, Value, Types};
+use super::{Entry, Modifiers, ResolveType, Scope, SemanticAnalyzer, TableTypes, TokenType, Word};
 use crate::report;
+use crate::variable_types::{FunctionCall, PointerType, Types, Value, Variable};
 
 impl SemanticAnalyzer {
     pub fn handle_argument(

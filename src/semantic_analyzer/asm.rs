@@ -1,5 +1,5 @@
-use crate::variable_types::InlineAssembly;
 use crate::parser::Block;
+use crate::variable_types::InlineAssembly;
 
 fn push_word(asm: &mut InlineAssembly, word: &str) {
     match asm.table.last_mut() {
@@ -38,5 +38,3 @@ pub(super) fn add_inline_asm(asm: &mut InlineAssembly, block: Block) {
         _ => {}
     }
 }
-
-
