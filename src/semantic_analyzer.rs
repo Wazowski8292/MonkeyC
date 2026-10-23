@@ -10,12 +10,13 @@ mod resolve;
 pub mod table;
 pub mod tokens;
 
-pub use table::*;
+pub use table::*; 
 pub use tokens::*;
 
 use crate::enbeded_funcs::FUNCTIONS;
 use crate::parser::{Block, Word};
 use crate::variable_types::{FunctionCall, PointerType};
+use crate::semantic_analyzer::add_arguments::ArgumentVariableInfo;
 use crate::warn;
 use std::vec::Vec;
 
@@ -25,6 +26,7 @@ enum Modifiers {
     StandAloneStructCall,
 }
 
+#[derive(Clone)]
 struct Entry {
     word: Word,
     token: TokenType,
@@ -240,7 +242,16 @@ impl SemanticAnalyzer {
         let in_argument = self.get_if_in_argument(in_nested_call.clone(), in_reasignment.clone(), in_function_call);
 
         if in_argument && self.current_struct_init.is_none() {
-            self.handle_argument(entry, in_reasignment, in_function_call, in_nested_call, expected_fc_params, fc_params_len, fc_target);
+            let argument_variable_info = ArgumentVariableInfo {
+                in_reasignment,
+                in_function_call,
+                in_nested_call,
+                expected_fc_params,
+                fc_params_len,
+                fc_target,
+            };
+
+            self.handle_argument(entry, argument_variable_info);
         } else {
             self.handle_new_entry(entry);
         }

@@ -1,10 +1,10 @@
-use super::{Entry, ResolveType, Scope, SemanticAnalyzer, TableTypes, TokenType};
+use super::{Entry, ResolveType, Scope, SemanticAnalyzer, TableTypes, TokenType, ArgumentVariableInfo, Modifiers};
 use crate::parser::Word;
 use crate::report;
 use crate::variable_types::PointerType;
 
 impl SemanticAnalyzer {
-    pub(super) fn check_parameters(&mut self, entry_info: Entry, fc_params_len: usize, fc_target: usize) {
+    pub(super) fn check_parameters(&self, entry_info: Entry, fc_params_len: usize, fc_target: usize) {
         let token = entry_info.token.clone();
         let word = entry_info.word.clone();
         let index = entry_info.index.clone();
@@ -89,6 +89,106 @@ impl SemanticAnalyzer {
             }
         }
     }
+
+    pub fn check_parameter_error(&self, entry_info: Entry, argument_variable_info: ArgumentVariableInfo) {
+        
+        let token = entry_info.token.clone();
+        let word = entry_info.word.clone();
+        let index = entry_info.index.clone();
+
+        let in_call_or_reasign = argument_variable_info.in_reasignment || argument_variable_info.in_function_call || argument_variable_info.in_nested_call;
+
+        if argument_variable_info.in_function_call || argument_variable_info.in_nested_call {
+            if argument_variable_info.fc_params_len >= argument_variable_info.expected_fc_params {
+                report!(
+                    self.file_name.clone(),
+                    word.line.unwrap_or(0),
+                    word.char_num.unwrap_or(0),
+                    "Too many arguments for function call. Expected: {}, Found: {}",
+                    argument_variable_info.expected_fc_params,
+                    argument_variable_info.fc_params_len + 1,
+                );
+            } else {
+                self.check_parameters(entry_info, argument_variable_info.fc_params_len, argument_variable_info.fc_target);
+            }
+        }
+
+        if in_call_or_reasign
+            && token == TokenType::Unknow
+            && index.is_none()
+            && !self.modifiers.contains(&Modifiers::InForLoop)
+            && !word.word.starts_with("self[")
+            && word.word != "self"
+        {
+            report!(self.file_name.clone(), word.line.unwrap_or(0), word.char_num.unwrap_or(0), "Undefined symbol: {}", word.word,);
+        }
+    }
+
+    pub fn check_pointer_type(&mut self, entry_info: Entry, argument_variable_info: ArgumentVariableInfo) {
+        let word = entry_info.word.clone();
+        
+        let rhs_ptr_type = self.ptr_type.clone();
+        let mut mismatch: Option<(TokenType, Option<TokenType>, Option<PointerType>)> = None;
+        match self.active_table().last_mut() {
+            Some(TableTypes::Variable(var)) if !argument_variable_info.in_nested_call => {
+                let value_type = TokenType::from_str(&word.word.clone()).literal_type();
+
+                if var.name.is_some()
+                    && let Some(vt) = value_type
+                {
+                    let corrrect_ptr_type = match var.ptr {
+                        Some(PointerType::Pointer) => rhs_ptr_type == Some(PointerType::Reference),
+                        _ => true,
+                    };
+
+                    if vt != var.token_type && !corrrect_ptr_type {
+                        mismatch = Some((var.token_type.clone(), Some(vt), rhs_ptr_type.clone()));
+                    }
+                }
+            }
+            Some(TableTypes::Reasingment(reasign)) if !argument_variable_info.in_nested_call => {
+                if reasign.token_type == TokenType::Unknow {
+                    let value_type = TokenType::from_str(&word.word.clone()).literal_type();
+                    if let Some(vt) = value_type {
+                        let corrrect_ptr_type = match reasign.ptr {
+                            Some(PointerType::Reference) => rhs_ptr_type != Some(PointerType::Pointer),
+                            None => rhs_ptr_type == None,
+                            _ => true,
+                        };
+
+                        if vt != reasign.token_type && !TokenType::is_operator(reasign.token_type.clone()) && !corrrect_ptr_type {
+                            mismatch = Some((reasign.token_type.clone(), Some(vt), rhs_ptr_type));
+                        }
+                    }
+                }
+            }
+            None => {
+                report!(self.file_name.clone(), word.line.unwrap_or(0), word.char_num.unwrap_or(0), "There wasn't a last entry",);
+
+                return;
+            }
+            _ => {}
+        }
+
+        if let Some((expected, found, ptr_type)) = mismatch {
+            let ptr_type_str = match ptr_type {
+                Some(PointerType::Pointer) => "*",
+                Some(PointerType::Reference) => "&",
+                _ => "",
+            };
+            report!(
+                self.file_name.clone(),
+                word.line.unwrap_or(0),
+                word.char_num.unwrap_or(0),
+                "Type mismatch. Expected: {}{}, Found: {}",
+                ptr_type_str,
+                expected.to_str(),
+                found.unwrap_or(TokenType::Unknow).to_str()
+            );
+        }
+
+
+    } 
 
     fn declared_type_of(&self, index: &Option<(usize, Scope, ResolveType)>) -> Option<TokenType> {
         let (idx, scope, _) = index.as_ref()?;
