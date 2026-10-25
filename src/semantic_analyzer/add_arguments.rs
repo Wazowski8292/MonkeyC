@@ -4,11 +4,11 @@ use crate::variable_types::{FunctionCall, PointerType, Types, Value, Variable};
 
 #[derive(Clone)]
 pub struct ArgumentVariableInfo {
-    pub in_reasignment: bool, 
-    pub in_function_call: bool, 
-    pub in_nested_call: bool, 
+    pub in_reasignment: bool,
+    pub in_function_call: bool,
+    pub in_nested_call: bool,
     pub expected_fc_params: usize,
-    pub fc_params_len: usize, 
+    pub fc_params_len: usize,
     pub fc_target: usize,
 }
 

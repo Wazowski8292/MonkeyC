@@ -10,13 +10,13 @@ mod resolve;
 pub mod table;
 pub mod tokens;
 
-pub use table::*; 
+pub use table::*;
 pub use tokens::*;
 
 use crate::enbeded_funcs::FUNCTIONS;
 use crate::parser::{Block, Word};
-use crate::variable_types::{FunctionCall, PointerType};
 use crate::semantic_analyzer::add_arguments::ArgumentVariableInfo;
+use crate::variable_types::{FunctionCall, PointerType};
 use crate::warn;
 use std::vec::Vec;
 
@@ -146,6 +146,45 @@ impl SemanticAnalyzer {
     }
 
     fn tokenize_word(&mut self, mut word: Word) {
+        self.get_pointer_type(&mut word);
+
+        let token = TokenType::from_str(&word.word);
+
+        self.set_value |= TokenType::is_operator(token.clone());
+
+        if !self.manage_special_simbols(token.clone(), word.clone()) {
+            return;
+        };
+
+        let index = self.resolve(word.word.clone());
+
+        let (expected_fc_params, fc_params_len, fc_target, in_nested_call) = self.get_parameter_info();
+
+        let entry = Entry {
+            word: word.clone(),
+            token,
+            index,
+        };
+
+        let (in_argument, in_reasignment, in_function_call) = self.get_if_in_argument(in_nested_call.clone());
+
+        if in_argument && self.current_struct_init.is_none() {
+            let argument_variable_info = ArgumentVariableInfo {
+                in_reasignment,
+                in_function_call,
+                in_nested_call,
+                expected_fc_params,
+                fc_params_len,
+                fc_target,
+            };
+
+            self.handle_argument(entry, argument_variable_info);
+        } else {
+            self.handle_new_entry(entry);
+        }
+    }
+
+    fn get_pointer_type(&mut self, word: &mut Word) {
         let length = word.word.len();
 
         match word.word.clone().chars().next() {
@@ -159,16 +198,14 @@ impl SemanticAnalyzer {
             }
             _ => self.ptr_type = None,
         }
+    }
 
-        let token = TokenType::from_str(&word.word);
-
-        self.set_value |= TokenType::is_operator(token.clone());
-
+    fn manage_special_simbols(&mut self, token: TokenType, word: Word) -> bool {
         match token {
-            TokenType::Equals => return,
+            TokenType::Equals => return false,
             TokenType::ReturnType => {
                 self.set_return_value = true;
-                return;
+                return false;
             }
             TokenType::Dots => {
                 let inst_name = self.find_preceding_instance_name();
@@ -176,7 +213,7 @@ impl SemanticAnalyzer {
                     self.eliminate_instance_placeholder(name);
                 }
                 self.current_struct_init = inst_name;
-                return;
+                return false;
             }
             TokenType::Assembly => {
                 warn!(
@@ -184,13 +221,15 @@ impl SemanticAnalyzer {
                     word.line.unwrap_or(0).clone(),
                     word.char_num.unwrap_or(0).clone(),
                     "The Monkey C compiler does not verify asmembly, you must check it by your self and remeber that the asmbler will return an error if it is the case, but it will not go through this compiler"
-                )
+                );
+
+                return false;
             }
-            _ => {}
+            _ => return true,
         }
+    }
 
-        let index = self.resolve(word.word.clone());
-
+    fn get_parameter_info(&mut self) -> (usize, usize, usize, bool) {
         let mut is_fc = false;
         let mut in_nested_call = false;
         let mut fc_target = 0;
@@ -231,33 +270,12 @@ impl SemanticAnalyzer {
             }
         }
 
-        let entry = Entry {
-            word: word.clone(),
-            token,
-            index,
-        };
-
-        let in_reasignment = matches!(self.active_table().last(), Some(TableTypes::Reasingment(_))) && !self.last_finished;
-        let in_function_call = matches!(self.active_table().last(), Some(TableTypes::FunctionCall(_))) && self.defining_parameters;
-        let in_argument = self.get_if_in_argument(in_nested_call.clone(), in_reasignment.clone(), in_function_call);
-
-        if in_argument && self.current_struct_init.is_none() {
-            let argument_variable_info = ArgumentVariableInfo {
-                in_reasignment,
-                in_function_call,
-                in_nested_call,
-                expected_fc_params,
-                fc_params_len,
-                fc_target,
-            };
-
-            self.handle_argument(entry, argument_variable_info);
-        } else {
-            self.handle_new_entry(entry);
-        }
+        (expected_fc_params, fc_params_len, fc_target, in_nested_call)
     }
 
-    fn get_if_in_argument(&mut self, in_nested_call: bool, in_reasignment: bool, in_function_call: bool) -> bool {
+    fn get_if_in_argument(&mut self, in_nested_call: bool) -> (bool, bool, bool) {
+        let in_reasignment = matches!(self.active_table().last(), Some(TableTypes::Reasingment(_))) && !self.last_finished;
+        let in_function_call = matches!(self.active_table().last(), Some(TableTypes::FunctionCall(_))) && self.defining_parameters;
         let in_conditional = matches!(self.active_table().last(), Some(TableTypes::Conditional(_))) && self.defining_parameters;
         let in_for_loop = matches!(
             self.active_table().last(),
@@ -283,7 +301,9 @@ impl SemanticAnalyzer {
 
         let in_call = in_reasignment || in_function_call || in_conditional || in_nested_call;
 
-        !self.last_finished || self.set_value || self.set_return_value || in_call
+        let in_argument = !self.last_finished || self.set_value || self.set_return_value || in_call;
+
+        (in_argument, in_reasignment, in_function_call)
     }
 
     fn pending_call_in(entry: &TableTypes) -> Option<&FunctionCall> {

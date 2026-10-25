@@ -1,4 +1,4 @@
-use super::{Entry, ResolveType, Scope, SemanticAnalyzer, TableTypes, TokenType, ArgumentVariableInfo, Modifiers};
+use super::{ArgumentVariableInfo, Entry, Modifiers, ResolveType, Scope, SemanticAnalyzer, TableTypes, TokenType};
 use crate::parser::Word;
 use crate::report;
 use crate::variable_types::PointerType;
@@ -91,12 +91,12 @@ impl SemanticAnalyzer {
     }
 
     pub fn check_parameter_error(&self, entry_info: Entry, argument_variable_info: ArgumentVariableInfo) {
-        
         let token = entry_info.token.clone();
         let word = entry_info.word.clone();
         let index = entry_info.index.clone();
 
-        let in_call_or_reasign = argument_variable_info.in_reasignment || argument_variable_info.in_function_call || argument_variable_info.in_nested_call;
+        let in_call_or_reasign =
+            argument_variable_info.in_reasignment || argument_variable_info.in_function_call || argument_variable_info.in_nested_call;
 
         if argument_variable_info.in_function_call || argument_variable_info.in_nested_call {
             if argument_variable_info.fc_params_len >= argument_variable_info.expected_fc_params {
@@ -126,7 +126,7 @@ impl SemanticAnalyzer {
 
     pub fn check_pointer_type(&mut self, entry_info: Entry, argument_variable_info: ArgumentVariableInfo) {
         let word = entry_info.word.clone();
-        
+
         let rhs_ptr_type = self.ptr_type.clone();
         let mut mismatch: Option<(TokenType, Option<TokenType>, Option<PointerType>)> = None;
         match self.active_table().last_mut() {
@@ -186,9 +186,7 @@ impl SemanticAnalyzer {
                 found.unwrap_or(TokenType::Unknow).to_str()
             );
         }
-
-
-    } 
+    }
 
     fn declared_type_of(&self, index: &Option<(usize, Scope, ResolveType)>) -> Option<TokenType> {
         let (idx, scope, _) = index.as_ref()?;
