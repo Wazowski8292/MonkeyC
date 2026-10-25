@@ -24,18 +24,17 @@ impl SemanticAnalyzer {
 
         // Peek at the last entry immutably to extract info needed for checks,
         // before taking a mutable borrow below.
-        let (var_needs_name, var_type_for_literal, fn_needs_name, in_return_expr) =
-            match self.active_table_ref().last() {
-                Some(TableTypes::Variable(var)) => {
-                    // var_needs_name: variable exists but hasn't received its name yet.
-                    let needs_name = var.name.is_none() && token == TokenType::Unknow;
-                    let var_type = if var.name.is_some() { Some(var.token_type.clone()) } else { None };
-                    (needs_name, var_type, false, false)
-                }
-                Some(TableTypes::Function(f)) => (false, None, f.name.is_none(), false),
-                Some(TableTypes::Return(_)) => (false, None, false, true),
-                _ => (false, None, false, false),
-            };
+        let (var_needs_name, var_type_for_literal, fn_needs_name, in_return_expr) = match self.active_table_ref().last() {
+            Some(TableTypes::Variable(var)) => {
+                // var_needs_name: variable exists but hasn't received its name yet.
+                let needs_name = var.name.is_none() && token == TokenType::Unknow;
+                let var_type = if var.name.is_some() { Some(var.token_type.clone()) } else { None };
+                (needs_name, var_type, false, false)
+            }
+            Some(TableTypes::Function(f)) => (false, None, f.name.is_none(), false),
+            Some(TableTypes::Return(_)) => (false, None, false, true),
+            _ => (false, None, false, false),
+        };
 
         // --- check: undefined symbol in return expression ---
         if in_return_expr {

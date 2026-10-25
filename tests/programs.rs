@@ -94,21 +94,12 @@ fn main() {
     let tests: Vec<Trial> = files
         .into_iter()
         .map(|path| {
-            let name = path
-                .strip_prefix(PROGRAMS_DIR)
-                .unwrap()
-                .with_extension("")
-                .display()
-                .to_string()
-                .replace('\\', "/");
+            let name = path.strip_prefix(PROGRAMS_DIR).unwrap().with_extension("").display().to_string().replace('\\', "/");
             // `// ignore: reason` marks a test for a check that is not implemented yet.
             // It shows as "ignored"; run those with `cargo test --test programs -- --ignored`.
-            let ignored = fs::read_to_string(&path)
-                .map(|s| s.lines().any(|l| marker(l, "ignore").is_some()))
-                .unwrap_or(false);
+            let ignored = fs::read_to_string(&path).map(|s| s.lines().any(|l| marker(l, "ignore").is_some())).unwrap_or(false);
             let test_name = name.clone();
-            Trial::test(name, move || run_case(&path, &test_name).map_err(Failed::from))
-                .with_ignored_flag(ignored)
+            Trial::test(name, move || run_case(&path, &test_name).map_err(Failed::from)).with_ignored_flag(ignored)
         })
         .collect();
 
@@ -167,15 +158,16 @@ fn parse_expectations(src: &str) -> Result<Expectations, String> {
                 error = Some(rest.trim().to_string());
             }
         } else if let Some(rest) = marker(line, "timeout") {
-            let secs: f64 = rest
-                .trim()
-                .parse()
-                .map_err(|_| format!("bad timeout marker: {line:?}"))?;
+            let secs: f64 = rest.trim().parse().map_err(|_| format!("bad timeout marker: {line:?}"))?;
             timeout = Duration::from_secs_f64(secs);
         }
     }
 
-    Ok(Expectations { stdout_lines, error, timeout })
+    Ok(Expectations {
+        stdout_lines,
+        error,
+        timeout,
+    })
 }
 
 // ------------------------------------------------------- running with timeout --
@@ -193,11 +185,7 @@ struct RunResult {
 /// them after the process exits, a program that prints a lot would fill the
 /// pipe buffer, block on write, and look like a hang.
 fn run_with_timeout(mut cmd: Command, timeout: Duration) -> io::Result<RunResult> {
-    let mut child = cmd
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()?;
+    let mut child = cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
 
     let mut out_pipe = child.stdout.take().unwrap();
     let mut err_pipe = child.stderr.take().unwrap();
@@ -240,16 +228,12 @@ fn run_with_timeout(mut cmd: Command, timeout: Duration) -> io::Result<RunResult
 /// Run one build step (assembler, linker). Fails on spawn error, timeout or a
 /// non-zero exit code, and includes the tool's output in the message.
 fn run_step(label: &str, cmd: Command, timeout: Duration) -> Result<(), String> {
-    let r = run_with_timeout(cmd, timeout)
-        .map_err(|e| format!("could not start {label}: {e} (is it installed and on PATH?)"))?;
+    let r = run_with_timeout(cmd, timeout).map_err(|e| format!("could not start {label}: {e} (is it installed and on PATH?)"))?;
     if r.timed_out {
         return Err(format!("{label} TIMED OUT after {timeout:?}"));
     }
     if !r.status.is_some_and(|s| s.success()) {
-        return Err(format!(
-            "{label} failed ({:?})\n--- stdout ---\n{}\n--- stderr ---\n{}",
-            r.status, r.stdout, r.stderr
-        ));
+        return Err(format!("{label} failed ({:?})\n--- stdout ---\n{}\n--- stderr ---\n{}", r.status, r.stdout, r.stderr));
     }
     Ok(())
 }
@@ -260,10 +244,7 @@ fn run_step(label: &str, cmd: Command, timeout: Duration) -> Result<(), String> 
 /// next run, not at the end, so after a failure you can open it and look at
 /// prog.asm, prog.o and prog yourself.
 fn work_dir(test_name: &str) -> PathBuf {
-    let safe: String = test_name
-        .chars()
-        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
-        .collect();
+    let safe: String = test_name.chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '_' }).collect();
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("monkeyc_tests").join(safe);
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).expect("cannot create work dir");
@@ -286,8 +267,7 @@ fn run_case(path: &Path, name: &str) -> Result<(), String> {
     // message and by whether prog.asm was produced.
     let mut cmd = compiler();
     cmd.arg("prog.MC").current_dir(&dir).env("NO_COLOR", "1");
-    let compiled = run_with_timeout(cmd, expect.timeout)
-        .map_err(|e| format!("could not start the compiler: {e}"))?;
+    let compiled = run_with_timeout(cmd, expect.timeout).map_err(|e| format!("could not start the compiler: {e}"))?;
     if compiled.timed_out {
         return Err(format!(
             "COMPILER TIMEOUT after {:?}\n--- stdout so far ---\n{}\n--- stderr so far ---\n{}",
@@ -318,9 +298,7 @@ fn run_case(path: &Path, name: &str) -> Result<(), String> {
     // assemble and link it ourselves.
     if !dir.join("prog").exists() {
         if !asm_path.exists() {
-            return Err(format!(
-                "the compiler produced neither prog nor prog.asm\n--- compiler output ---\n{compiler_output}"
-            ));
+            return Err(format!("the compiler produced neither prog nor prog.asm\n--- compiler output ---\n{compiler_output}"));
         }
 
         // ---- 2. assemble + link ----
@@ -336,8 +314,7 @@ fn run_case(path: &Path, name: &str) -> Result<(), String> {
     // ---- 3. run the compiled program ----
     let mut run = Command::new(dir.join("prog"));
     run.current_dir(&dir);
-    let result = run_with_timeout(run, expect.timeout)
-        .map_err(|e| format!("could not start the compiled program: {e}"))?;
+    let result = run_with_timeout(run, expect.timeout).map_err(|e| format!("could not start the compiled program: {e}"))?;
     if result.timed_out {
         return Err(format!(
             "PROGRAM TIMEOUT after {:?} (infinite loop in the program?)\n--- stdout so far ---\n{}\n--- stderr so far ---\n{}",
@@ -369,20 +346,14 @@ fn run_case(path: &Path, name: &str) -> Result<(), String> {
     if STRICT_LINES {
         let actual: Vec<&str> = result.stdout.lines().collect();
         if actual != expect.stdout_lines {
-            return Err(format!(
-                "output mismatch\n  expected: {:?}\n       got: {:?}",
-                expect.stdout_lines, actual
-            ));
+            return Err(format!("output mismatch\n  expected: {:?}\n       got: {:?}", expect.stdout_lines, actual));
         }
     } else {
         let squash = |s: &str| s.split_whitespace().collect::<String>();
         let actual = squash(&result.stdout);
         let wanted = squash(&expect.stdout_lines.concat());
         if actual != wanted {
-            return Err(format!(
-                "output mismatch (whitespace ignored)\n  expected: {:?}\n       got: {:?}",
-                wanted, actual
-            ));
+            return Err(format!("output mismatch (whitespace ignored)\n  expected: {:?}\n       got: {:?}", wanted, actual));
         }
     }
     Ok(())

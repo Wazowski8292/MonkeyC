@@ -20,11 +20,7 @@ fn find_in_level(name: &str, table: &[TableTypes], nest_level: usize) -> Option<
             let is_last = idx + 1 == table.len();
             let has_no_value = v.value.as_ref().map_or(true, |vals| vals.is_empty());
             let is_struct = matches!(v.token_type, TokenType::StructDef(_));
-            if is_last && has_no_value && !is_struct {
-                None
-            } else {
-                Some((idx, scope_for_level(nest_level), ResolveType::Variable))
-            }
+            if is_last && has_no_value && !is_struct { None } else { Some((idx, scope_for_level(nest_level), ResolveType::Variable)) }
         }
         TableTypes::Function(f) if f.name.as_deref() == Some(name) => Some((idx, scope_for_level(nest_level), ResolveType::Function)),
         TableTypes::StructLiteral(s) if s.name == name => Some((idx, scope_for_level(nest_level), ResolveType::Struct)),

@@ -109,15 +109,16 @@ impl SemanticAnalyzer {
                         Some(TableTypes::FunctionCall(fc)) => {
                             Some((fc.name.clone(), fc.scope, fc.target, fc.parameters.as_ref().map_or(0, |p| p.len())))
                         }
-                        Some(entry) => {
-                            Self::pending_call_in(entry).map(|fc| {
-                                (fc.name.clone(), fc.scope, fc.target, fc.parameters.as_ref().map_or(0, |p| p.len()))
-                            })
-                        }
+                        Some(entry) => Self::pending_call_in(entry)
+                            .map(|fc| (fc.name.clone(), fc.scope, fc.target, fc.parameters.as_ref().map_or(0, |p| p.len()))),
                         None => None,
                     };
                     if let Some((fc_name, fc_scope, fc_target, actual_len)) = fc_info {
-                        let dummy_word = crate::parser::Word { word: fc_name.clone(), line: None, char_num: None };
+                        let dummy_word = crate::parser::Word {
+                            word: fc_name.clone(),
+                            line: None,
+                            char_num: None,
+                        };
                         self.check_too_few_arguments(&fc_name, fc_scope, fc_target, actual_len, &dummy_word);
                     }
                 }

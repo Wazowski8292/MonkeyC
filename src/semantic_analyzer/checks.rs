@@ -234,9 +234,7 @@ impl SemanticAnalyzer {
     pub(super) fn check_redeclared_variable(&self, name: &str, word: &Word) {
         let table = self.active_table_ref();
         // Check if another Variable with the same name already exists in this scope.
-        let already_declared = table.iter().any(|entry| {
-            matches!(entry, TableTypes::Variable(v) if v.name.as_deref() == Some(name))
-        });
+        let already_declared = table.iter().any(|entry| matches!(entry, TableTypes::Variable(v) if v.name.as_deref() == Some(name)));
         if already_declared {
             report!(
                 self.file_name.clone(),
@@ -250,45 +248,23 @@ impl SemanticAnalyzer {
 
     /// Check for a duplicate function name at root level.
     pub(super) fn check_duplicate_function(&self, name: &str, word: &Word) {
-        let already_declared = self.table.iter().any(|entry| {
-            matches!(entry, TableTypes::Function(f) if f.name.as_deref() == Some(name))
-        });
+        let already_declared = self.table.iter().any(|entry| matches!(entry, TableTypes::Function(f) if f.name.as_deref() == Some(name)));
         if already_declared {
-            report!(
-                self.file_name.clone(),
-                word.line.unwrap_or(0),
-                word.char_num.unwrap_or(0),
-                "Function '{}' is already defined",
-                name,
-            );
+            report!(self.file_name.clone(), word.line.unwrap_or(0), word.char_num.unwrap_or(0), "Function '{}' is already defined", name,);
         }
     }
 
     /// Post-analysis check: make sure a `main` function was defined.
     pub(super) fn check_main_exists(&self) {
-        let has_main = self.table.iter().any(|entry| {
-            matches!(entry, TableTypes::Function(f) if f.name.as_deref() == Some("main"))
-        });
+        let has_main = self.table.iter().any(|entry| matches!(entry, TableTypes::Function(f) if f.name.as_deref() == Some("main")));
         if !has_main {
-            report!(
-                self.file_name.clone(),
-                0,
-                0,
-                "No 'main' function found",
-            );
+            report!(self.file_name.clone(), 0, 0, "No 'main' function found",);
         }
     }
 
     /// Check that a completed function call received at least as many arguments as required.
     /// Call this after the closing `)` of a call is processed.
-    pub(super) fn check_too_few_arguments(
-        &self,
-        fc_name: &str,
-        fc_scope: Scope,
-        fc_target: usize,
-        actual_len: usize,
-        word: &Word,
-    ) {
+    pub(super) fn check_too_few_arguments(&self, fc_name: &str, fc_scope: Scope, fc_target: usize, actual_len: usize, word: &Word) {
         use crate::enbeded_funcs::FUNCTIONS;
         let expected = if fc_scope == Scope::EnbedFunc {
             FUNCTIONS[fc_target].parameters.len()
@@ -332,9 +308,9 @@ impl SemanticAnalyzer {
                         s.functions.iter().find_map(|f| {
                             if let TableTypes::Function(func) = f {
                                 func.parameters.as_ref().and_then(|params| {
-                                    params.iter().find(|p| {
-                                        matches!(p, TableTypes::Variable(v) if v.name.as_deref() == Some(word.word.as_str()))
-                                    })
+                                    params
+                                        .iter()
+                                        .find(|p| matches!(p, TableTypes::Variable(v) if v.name.as_deref() == Some(word.word.as_str())))
                                 })
                             } else {
                                 None
@@ -346,13 +322,7 @@ impl SemanticAnalyzer {
                 });
 
                 if found_in_struct_method.is_none() {
-                    report!(
-                        self.file_name.clone(),
-                        word.line.unwrap_or(0),
-                        word.char_num.unwrap_or(0),
-                        "Undefined symbol: {}",
-                        word.word,
-                    );
+                    report!(self.file_name.clone(), word.line.unwrap_or(0), word.char_num.unwrap_or(0), "Undefined symbol: {}", word.word,);
                 }
             }
         }
@@ -364,9 +334,7 @@ impl SemanticAnalyzer {
         let resolved_type = self
             .table
             .iter()
-            .chain(self.table.iter().flat_map(|t| {
-                if let TableTypes::Function(f) = t { f.table.iter() } else { [].iter() }
-            }))
+            .chain(self.table.iter().flat_map(|t| if let TableTypes::Function(f) = t { f.table.iter() } else { [].iter() }))
             .find_map(|entry| match entry {
                 TableTypes::Variable(v) if v.name.as_deref() == Some(inst_name) => Some(&v.token_type),
                 _ => None,
