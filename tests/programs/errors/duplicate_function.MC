@@ -9,5 +9,4 @@ fn twice() -> int {
 fn main() {
     print_int(twice());
 }
-## ignore: the semantic analyzer has no duplicate-function check yet
 ## expect-error: already

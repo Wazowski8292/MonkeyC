@@ -1,5 +1,4 @@
 fn main() {
-    int x = "hello";
+    int x = true;
 }
-## ignore: the analyzer currently lets this compile (the plain-variable type check never fires)
-## expect-error: Type mismatch. Expected: int, Found: <string literal>
+## expect-error: Type mismatch. Expected: int, Found: bool

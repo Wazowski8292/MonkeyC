@@ -101,6 +101,25 @@ impl SemanticAnalyzer {
                     self.defining_parameters = true;
                     self.analyze(blocks.to_vec());
                     self.defining_parameters = false;
+
+                    // After all parameters of a call are collected, check for too-few-args.
+                    // The FunctionCall may be: the direct last entry, OR pending inside a
+                    // Variable's value, OR inside a Reasingment's parameters.
+                    let fc_info = match self.active_table().last() {
+                        Some(TableTypes::FunctionCall(fc)) => {
+                            Some((fc.name.clone(), fc.scope, fc.target, fc.parameters.as_ref().map_or(0, |p| p.len())))
+                        }
+                        Some(entry) => {
+                            Self::pending_call_in(entry).map(|fc| {
+                                (fc.name.clone(), fc.scope, fc.target, fc.parameters.as_ref().map_or(0, |p| p.len()))
+                            })
+                        }
+                        None => None,
+                    };
+                    if let Some((fc_name, fc_scope, fc_target, actual_len)) = fc_info {
+                        let dummy_word = crate::parser::Word { word: fc_name.clone(), line: None, char_num: None };
+                        self.check_too_few_arguments(&fc_name, fc_scope, fc_target, actual_len, &dummy_word);
+                    }
                 }
             }
         }
@@ -329,9 +348,12 @@ pub fn analyze_semantically(stack: Vec<Block>, file_name: String, debug: bool) -
     let mut semantic_analyzer: SemanticAnalyzer = SemanticAnalyzer::new(file_name);
     semantic_analyzer.analyze(stack);
 
+    // Post-analysis whole-program checks.
+    semantic_analyzer.check_main_exists();
+
     if debug {
         debug::print(&semantic_analyzer.table.clone());
-        //println!("{:#?}", semantic_analyzer.table);
+        println!("{:#?}", semantic_analyzer.table);
     }
 
     semantic_analyzer.table

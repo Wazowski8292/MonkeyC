@@ -208,4 +208,182 @@ impl SemanticAnalyzer {
             _ => None,
         }
     }
+
+    /// Check that a variable declaration's literal value matches the declared type.
+    /// Called when a new `Variable` entry gets its first value word and already has a name.
+    pub(super) fn check_variable_literal_type(&self, var_type: &TokenType, value_word: &Word) {
+        let literal_token = TokenType::from_str(&value_word.word);
+        let literal_declared = match literal_token.literal_type() {
+            Some(t) => t,
+            None => return, // not a literal — nothing to check here
+        };
+
+        if &literal_declared != var_type {
+            report!(
+                self.file_name.clone(),
+                value_word.line.unwrap_or(0),
+                value_word.char_num.unwrap_or(0),
+                "Type mismatch. Expected: {}, Found: {}",
+                var_type.to_str(),
+                literal_declared.to_str(),
+            );
+        }
+    }
+
+    /// Check for variable redeclaration inside the currently active scope.
+    pub(super) fn check_redeclared_variable(&self, name: &str, word: &Word) {
+        let table = self.active_table_ref();
+        // Check if another Variable with the same name already exists in this scope.
+        let already_declared = table.iter().any(|entry| {
+            matches!(entry, TableTypes::Variable(v) if v.name.as_deref() == Some(name))
+        });
+        if already_declared {
+            report!(
+                self.file_name.clone(),
+                word.line.unwrap_or(0),
+                word.char_num.unwrap_or(0),
+                "Variable '{}' is already declared in this scope",
+                name,
+            );
+        }
+    }
+
+    /// Check for a duplicate function name at root level.
+    pub(super) fn check_duplicate_function(&self, name: &str, word: &Word) {
+        let already_declared = self.table.iter().any(|entry| {
+            matches!(entry, TableTypes::Function(f) if f.name.as_deref() == Some(name))
+        });
+        if already_declared {
+            report!(
+                self.file_name.clone(),
+                word.line.unwrap_or(0),
+                word.char_num.unwrap_or(0),
+                "Function '{}' is already defined",
+                name,
+            );
+        }
+    }
+
+    /// Post-analysis check: make sure a `main` function was defined.
+    pub(super) fn check_main_exists(&self) {
+        let has_main = self.table.iter().any(|entry| {
+            matches!(entry, TableTypes::Function(f) if f.name.as_deref() == Some("main"))
+        });
+        if !has_main {
+            report!(
+                self.file_name.clone(),
+                0,
+                0,
+                "No 'main' function found",
+            );
+        }
+    }
+
+    /// Check that a completed function call received at least as many arguments as required.
+    /// Call this after the closing `)` of a call is processed.
+    pub(super) fn check_too_few_arguments(
+        &self,
+        fc_name: &str,
+        fc_scope: Scope,
+        fc_target: usize,
+        actual_len: usize,
+        word: &Word,
+    ) {
+        use crate::enbeded_funcs::FUNCTIONS;
+        let expected = if fc_scope == Scope::EnbedFunc {
+            FUNCTIONS[fc_target].parameters.len()
+        } else {
+            let (table, is_method) = self.callee_table(fc_name);
+            if let Some(TableTypes::Function(f)) = table.get(fc_target) {
+                f.parameters.as_ref().map_or(0, |p| p.len()) + is_method as usize
+            } else {
+                return;
+            }
+        };
+
+        if actual_len < expected {
+            report!(
+                self.file_name.clone(),
+                word.line.unwrap_or(0),
+                word.char_num.unwrap_or(0),
+                "Too few arguments for function call. Expected: {}, Found: {}",
+                expected,
+                actual_len,
+            );
+        }
+    }
+
+    /// Check that a symbol referenced inside a `return` expression exists in the current
+    /// function's scope (or at root level). Reports an error when the identifier is
+    /// unknown — exactly the same rule as for identifiers in assignments.
+    pub(super) fn check_return_expression_defined(&self, word: &Word, index: &Option<(usize, Scope, ResolveType)>) {
+        if index.is_none() {
+            let token = TokenType::from_str(&word.word);
+            // Only flag plain identifiers (not operators, literals, …)
+            if token == TokenType::Unknow
+                && !word.word.starts_with("self[")
+                && word.word != "self"
+                && !self.modifiers.contains(&Modifiers::InForLoop)
+            {
+                // Also search struct method parameters — they are not found by the normal
+                // resolve chain when we are inside a struct literal body.
+                let found_in_struct_method = self.table.iter().find_map(|entry| {
+                    if let TableTypes::StructLiteral(s) = entry {
+                        s.functions.iter().find_map(|f| {
+                            if let TableTypes::Function(func) = f {
+                                func.parameters.as_ref().and_then(|params| {
+                                    params.iter().find(|p| {
+                                        matches!(p, TableTypes::Variable(v) if v.name.as_deref() == Some(word.word.as_str()))
+                                    })
+                                })
+                            } else {
+                                None
+                            }
+                        })
+                    } else {
+                        None
+                    }
+                });
+
+                if found_in_struct_method.is_none() {
+                    report!(
+                        self.file_name.clone(),
+                        word.line.unwrap_or(0),
+                        word.char_num.unwrap_or(0),
+                        "Undefined symbol: {}",
+                        word.word,
+                    );
+                }
+            }
+        }
+    }
+
+    /// Check that `var::member` where `var` is not a struct-typed variable emits an error.
+    pub(super) fn check_member_on_non_struct(&self, inst_name: &str, word: &Word) {
+        // If inst_name resolves to a Variable whose type is NOT StructDef, it's an error.
+        let resolved_type = self
+            .table
+            .iter()
+            .chain(self.table.iter().flat_map(|t| {
+                if let TableTypes::Function(f) = t { f.table.iter() } else { [].iter() }
+            }))
+            .find_map(|entry| match entry {
+                TableTypes::Variable(v) if v.name.as_deref() == Some(inst_name) => Some(&v.token_type),
+                _ => None,
+            });
+
+        if let Some(token_type) = resolved_type {
+            if !matches!(token_type, TokenType::StructDef(_)) {
+                report!(
+                    self.file_name.clone(),
+                    word.line.unwrap_or(0),
+                    word.char_num.unwrap_or(0),
+                    "Cannot call method '{}' on non-struct variable '{}' of type '{}'",
+                    word.word,
+                    inst_name,
+                    token_type.to_str(),
+                );
+            }
+        }
+    }
 }

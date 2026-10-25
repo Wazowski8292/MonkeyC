@@ -66,6 +66,11 @@ impl ErrorHandler {
     }
 
     fn general_info_print(&self, diagnostic: Diagnostic) {
+        if diagnostic.line == 0 {
+            // No source location — nothing to display.
+            return;
+        }
+
         let error_line = (diagnostic.line - 1) as usize;
         let total_lines = self.source.len();
 

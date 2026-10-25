@@ -123,6 +123,9 @@ impl SemanticAnalyzer {
                 );
             }
             Member::Unresolved => {
+                // inst_name exists but is not a struct — emit an error.
+                self.check_member_on_non_struct(&inst_name, &word);
+
                 let reasign = Reasingment {
                     target,
                     target_scope: scope,
