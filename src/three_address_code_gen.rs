@@ -578,7 +578,7 @@ impl ThreeAddressCodeGenerator {
         match e {
             TableTypes::FunctionCall(call) => Value::FuncCall(call.clone()),
             TableTypes::Reasingment(r) if r.ptr == Some(PointerType::Pointer) => Value::Deref(r.name.clone()),
-            TableTypes::Reasingment(r) if r.ptr == Some(PointerType::Reference) => Value::Ref(r.name.clone()),
+            TableTypes::Reasingment(r) if r.ptr == Some(PointerType::Reference) && r.name != "self" => Value::Ref(r.name.clone()),
             TableTypes::Reasingment(r) => {
                 if let Some(idx) = &r.array_index {
                     Value::Index(r.name.clone(), idx.clone())

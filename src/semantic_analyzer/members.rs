@@ -114,6 +114,8 @@ impl SemanticAnalyzer {
         if let Some(pos) = self.modifiers.iter().rposition(|e| matches!(e, Modifiers::StandAloneStructCall)) {
             self.modifiers.remove(pos);
             self.active_table().pop();
+            self.active_table().push(entry);
+            return;
         }
 
         let leftover = match self.active_table().last_mut() {
