@@ -6,7 +6,6 @@ This page lists what's planned for Monkey C, split into near-term work and longe
 
 These are the next things planned for the language itself.
 
-- **Redesign Parser** - rewrite the hole parser file to make it more abstracted and logical.
 - **Multiple files** - adding the ability to be able to call and use several files in one project easily.
 - **Do while loop** - it is a while loop but the condition check is at the end.
 - **Substitute embeded functions** - Rewrite embeded functions so they are writen in actuall Monkey C.
