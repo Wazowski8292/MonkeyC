@@ -1,5 +1,7 @@
 # Language Guide
 
+> **Quick Summary:** Monkey C programs are organized into functions defined with `fn` (with execution starting at `fn main()`), statically-typed variables (`int`, `float`, `double`, `str`, `bool`, `char`), fixed-size arrays, loop constructs (`while` and comma-delimited `for` loops), structs for custom data structures, and standard output via built-in `print` functions.
+
 This page walks through the basic building blocks of Monkey C using a small example, explaining each part as it comes up. If you haven't compiled anything yet, start with [Getting Started](./getting-started.md); for a full list of keywords, operators, and literals, see [Token Types](./token-types.md).
 
 ## A Basic Program
@@ -47,6 +49,16 @@ while (count < 5) {
 
 A **while loop** repeats a block of code for as long as a condition stays true. Here, the condition is `count < 5`, so the loop keeps running until `count` reaches 5. Each time through, it prints the character at position `count` in the array, then increments `count` by one using [`++`](./token-types.md#arithmetic-operators).
 
+### For Loops
+
+Monkey C also supports counted `for` loops, separating the initializer, condition, and step with commas:
+
+```c
+for (int x = 0, x < 5, x += 1) {
+    print_int(x);
+}
+```
+
 ### Putting It Together
 
 Line by line, this program:
@@ -61,5 +73,7 @@ This is a small example, but it touches most of the core pieces you'll use in an
 ## Next Steps
 
 - [Token Types](./token-types.md) — full reference for every keyword, operator, and literal used above and beyond.
-- [Roadmap](./roadmap.md) — language features not shown here yet, like enums.
+- [Structs](./structs.md) — creating custom data types and methods.
+- [Inline Assembly](./Inline_assembly.md) — embedding raw x86-64 assembly in Monkey C functions.
+- [Roadmap](./roadmap.md) — language features and upcoming plans.
 - [Index](./index.md) - shows a full list of the language features and facilitates moving between docs.

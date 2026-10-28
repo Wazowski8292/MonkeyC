@@ -1,5 +1,7 @@
 # Getting Started
 
+> **Quick Summary:** Running Monkey C requires Rust (to build the compiler), NASM (to assemble the generated x86-64 assembly), and GCC (to link against libc). You can build and execute any `.MC` source file with a single command via `make run FILE=YourProgram.MC`.
+
 This page covers what you need before you can compile and run Monkey C code, and how to actually do it.
 
 ## Prerequisites

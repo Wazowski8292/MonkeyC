@@ -1,5 +1,7 @@
 # print
 
+> **Quick Summary:** Monkey C provides built-in `print` functions (`print_int`, `print_float`, `print_bool`, `print_char`, and `print_string`) to display values to standard output. Each variant takes a single argument of its corresponding type, adheres to the x86-64 System V calling convention (integers and pointers in `rdi`, floating point in `xmm0`), and forwards formatted output to libc's `printf`.
+
 `print` is the standard library's function for writing a value to the screen. There isn't a single `print` in the assembly itself — instead there's one variant per type, each named `print_<type>`, and the compiler picks the right one based on the type of the value you're printing.
 
 A **standard library function** is one that ships with the language and is always available to a Monkey C program, without needing to be written or imported. Every print variant is hand-written directly in x86-64 assembly rather than compiled from Monkey C source, and all of them work the same way underneath: take one argument, format it, and hand it to `printf` to actually write out.

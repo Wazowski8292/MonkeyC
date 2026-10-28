@@ -9,12 +9,14 @@ This is the starting point for the Monkey C docs. Pick a page below depending on
 
 ## Looking something up?
 
-- [Token Types](./Docs/stoken-types.md) — every keyword, operator, and literal the language recognizes.
+- [Token Types](./Docs/token-types.md) — every keyword, operator, and literal the language recognizes.
+- [Structs](./Docs/structs.md) — defining custom compound types and methods.
+- [Inline Assembly](./Docs/Inline_assembly.md) — embedding raw x86-64 assembly in functions.
 - [Standard Library Index](./Docs/index.md) — every function and type built into the language, like `print`.
 
 ## Working on the compiler itself?
 
--[Adding Built-in Functions](./Docs/adding-builtin-functions.md) — how built-in functions like `print` are defined internally, and how to add a new one.
+- [Adding Built-in Functions](./Docs/adding-builtin-functions.md) — how built-in functions like `print` are defined internally, and how to add a new one.
 - [Roadmap](./Docs/roadmap.md) — what's implemented, what's planned next, and longer-term goals.
 
 ## AI

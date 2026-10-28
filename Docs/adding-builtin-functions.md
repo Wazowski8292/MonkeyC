@@ -1,5 +1,7 @@
 # Adding Built-in Functions
 
+> **Quick Summary:** Built-in (embedded) functions provide standard language utilities (like `print_int` and `print_string`) by embedding handwritten x86-64 assembly directly into the compiled binary. They are defined in `src/enbeded_funcs.rs` as entries in the constant `FUNCTIONS` array using the `PubFuncs` struct (`name`, `parameters`, `function`), which enables the compiler to validate parameter types and inject the routine's assembly code automatically whenever called.
+
 This page explains the internal structure used to define built-in functions like `print_int` and `print_string` (see [print](./print.md)), and what's needed to add a new one.
 
 ## The PubFuncs Struct
@@ -50,6 +52,6 @@ For a `PubFuncs` entry to work correctly, it needs to follow a few rules:
 ## Adding a New Built-in Function
 
 1. Write and test the assembly implementation on its own first, to confirm it does what you want.
-2. Add a new `PubFuncs` entry to the `FUNCTIONS` array, filling in `name`, `parameters`, and `function`.
+2. Add a new `PubFuncs` entry to the `FUNCTIONS` array in `src/enbeded_funcs.rs`, filling in `name`, `parameters`, and `function`.
 3. Give it its own doc page (like [print.md](./print.md)) explaining what it does and how, following the same format as the existing entries.
 4. Add a link to that page in [the standard library index](./index.md).

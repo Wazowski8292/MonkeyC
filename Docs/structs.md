@@ -1,5 +1,7 @@
 # Structs
 
+> **Quick Summary:** Structs (`struct Name { ... }`) define custom data types that encapsulate fields (with optional default values) and methods that operate on them via an implicit `self` pointer. Instances are allocated on the stack (declared with `StructName var;`), and their fields and methods are accessed using the double-colon syntax (`instance::field` and `instance::method()`).
+
 A **struct** groups related values (its *fields*) and the functions that work on them (its *methods*) under one name. Each instance of a struct keeps its own copy of the fields.
 
 ```text

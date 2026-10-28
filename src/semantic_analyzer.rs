@@ -82,6 +82,7 @@ impl SemanticAnalyzer {
                 Block::Collection(blocks) => {
                     if let Some(TableTypes::InlineAssembly(asm)) = self.active_table().last_mut() {
                         for block in blocks {
+                            println!("{:?}", 5);
                             asm::add_inline_asm(asm, block.clone());
                         }
                     } else {
@@ -102,9 +103,6 @@ impl SemanticAnalyzer {
                     self.analyze(blocks.to_vec());
                     self.defining_parameters = false;
 
-                    // After all parameters of a call are collected, check for too-few-args.
-                    // The FunctionCall may be: the direct last entry, OR pending inside a
-                    // Variable's value, OR inside a Reasingment's parameters.
                     let fc_info = match self.active_table().last() {
                         Some(TableTypes::FunctionCall(fc)) => {
                             Some((fc.name.clone(), fc.scope, fc.target, fc.parameters.as_ref().map_or(0, |p| p.len())))
@@ -243,7 +241,7 @@ impl SemanticAnalyzer {
                     "The Monkey C compiler does not verify asmembly, you must check it by your self and remeber that the asmbler will return an error if it is the case, but it will not go through this compiler"
                 );
 
-                return false;
+                return true;
             }
             _ => return true,
         }

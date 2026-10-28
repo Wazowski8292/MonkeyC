@@ -1,16 +1,21 @@
-# Standard Library Index
+# Standard Library & Language Index
 
-This page is a flat list of everything in the standard library, so a specific function or type can be found without digging through every doc. Each entry links straight to the page that explains what it is and how it works. As the standard library grows, add one row here per new function or type.
+> **Quick Summary:** A central reference indexing all built-in functions, types, and language features in Monkey C, providing quick links to their dedicated documentation pages.
 
-## Functions
+This page is a flat list of everything in the language and standard library, so a specific function, type, or feature can be found without digging through every doc. Each entry links straight to the page that explains what it is and how it works.
 
-| Name | Description |
-|---|---|
-| [`print`](./print.md) | Writes a value to the screen. Covers `print_int`, `print_float`, `print_bool`, `print_char`, and `print_string`. |
-
-## Types
+## Built-in Functions
 
 | Name | Description |
 |---|---|
-| [`structs`](./structs.md) | It bundels variables into one and it can have function assosiated to them. |
-| [**Inline assembly**](./inline-assembly.md) | a special block, like `struct`, written as `asm -> size { ... }`, that adds raw assembly to a program and reserves `size` bytes (rounded to the closest power of two). |
+| [`print`](./print.md) | Writes a value to standard output. Covers `print_int`, `print_float`, `print_bool`, `print_char`, and `print_string`. |
+| [Adding Built-in Functions](./adding-builtin-functions.md) | Guide for defining new built-in functions via `PubFuncs` and assembly in the compiler. |
+
+## Types & Features
+
+| Name | Description |
+|---|---|
+| [`structs`](./structs.md) | Bundles fields and associated methods into a custom type allocated on the stack. |
+| [**Inline assembly**](./Inline_assembly.md) | Special block written as `asm -> size { ... }` that embeds raw x86-64 assembly instructions and resolves local variable stack offsets. |
+| [Token Types](./token-types.md) | Complete reference of keywords, types, literals, operators, and delimiters recognized by Monkey C. |
+| [Language Guide](./language-guide.md) | Walkthrough of core syntax, variables, arrays, loops, and functions. |

@@ -1,5 +1,7 @@
 # Inline Assembly
 
+> **Quick Summary:** Inline assembly (`asm -> size { ... }`) allows embedding raw x86-64 assembly instructions directly inside Monkey C functions or methods, reserving a specified stack space (rounded to the closest power of two). The compiler injects instructions directly into the output and automatically substitutes Monkey C local variable names with their corresponding stack slots (e.g. `mov edi, a` becomes `mov edi, [rbp - 8]`), leaving register preservation and label uniqueness up to the programmer.
+
 An **inline assembly block** lets you write raw x86-64 assembly directly inside a Monkey C function. Like a `struct`, it is a special block with its own keyword, but instead of grouping fields and methods it holds instructions that are placed into the program exactly as you wrote them.
 
 ```text
@@ -56,9 +58,28 @@ This prints `7` and then `8`.
 
 The block can appear anywhere a statement can, including inside a method of a [struct](./structs.md).
 
+## Referencing Local Variables
+
+An inline assembly block can refer to Monkey C local variables directly by name. During code generation, the compiler resolves variable names to their allocated stack slot operand (e.g. `[rbp - 8]`):
+
+```text
+fn main() {
+    int a = 7;
+    asm -> 32 {
+        mov edi, a
+        call print_int
+    }
+}
+```
+
+The compiler automatically substitutes `a` with its stack location (such as `[rbp - 8]`). You can write either `mov edi, a` or `mov edi, [a]`; both resolve cleanly to the variable's stack slot.
+
 ## Things to Keep in Mind
 
-The compiler does not read or check the assembly in a block. A mistake in it is not a Monkey C error: it is an assembler error, or a program that crashes when it runs.
+The compiler does not read or check the assembly in a block. It issues a compile warning reminding you to verify instructions yourself:
+```text
+[Warning]: The Monkey C compiler does not verify asmembly, you must check it by your self and remeber that the asmbler will return an error if it is the case, but it will not go through this compiler
+```
 
 - **Registers.** The compiler's own code uses registers too. Anything you change that the surrounding code relies on, such as `rbp` or `rsp`, is yours to put back before the block ends.
 - **Labels.** A label inside a block lives in the same assembly file as the rest of the program, so pick names that no function or other block uses.
@@ -66,7 +87,6 @@ The compiler does not read or check the assembly in a block. A mistake in it is 
 
 ## Not Supported Yet
 
-- **Reading Monkey C variables.** A block cannot refer to a local variable by name.
 - **Returning a value.** A block is a statement and has no value of its own.
 - **Other architectures.** Only x86-64 assembly is accepted.
 

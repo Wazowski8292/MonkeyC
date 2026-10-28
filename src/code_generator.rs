@@ -658,8 +658,75 @@ impl CodeGen {
     }
 
     fn add_inline_asm(&mut self, tac: &Tac) {
-        for line in tac.arguments.iter() {
-            self.emit(&format!("    {}", line));
+        for line in &tac.arguments {
+            let formatted_line = self.format_inline_asm_line(line);
+            self.emit(&format!("    {}", formatted_line));
+        }
+    }
+
+    fn format_inline_asm_line(&mut self, line: &str) -> String {
+        let mut formatted = String::new();
+        let mut current_word = String::new();
+
+        for ch in line.chars() {
+            if ch.is_alphanumeric() || ch == '_' {
+                current_word.push(ch);
+                continue;
+            }
+
+            self.append_asm_delimiter(&mut formatted, &mut current_word, ch);
+        }
+
+        self.flush_asm_word(&mut formatted, &mut current_word);
+        formatted
+    }
+
+    fn append_asm_delimiter(&mut self, output: &mut String, word: &mut String, ch: char) {
+        if ch == ']' && self.try_substitute_bracketed_slot(output, word) {
+            return;
+        }
+
+        self.flush_asm_word(output, word);
+        output.push(ch);
+    }
+
+    fn try_substitute_bracketed_slot(&mut self, output: &mut String, word: &mut String) -> bool {
+        if word.is_empty() {
+            return false;
+        }
+
+        let Some(replacement) = self.resolve_slot_operand(word) else {
+            return false;
+        };
+
+        let trimmed_len = output.trim_end().len();
+        if !output[..trimmed_len].ends_with('[') {
+            return false;
+        }
+
+        output.truncate(trimmed_len - 1);
+        output.push_str(&replacement);
+        word.clear();
+        true
+    }
+
+    fn flush_asm_word(&mut self, output: &mut String, word: &mut String) {
+        if word.is_empty() {
+            return;
+        }
+
+        match self.resolve_slot_operand(word) {
+            Some(replacement) => output.push_str(&replacement),
+            None => output.push_str(word),
+        }
+        word.clear();
+    }
+
+    fn resolve_slot_operand(&mut self, word: &str) -> Option<String> {
+        if self.slot_map.contains_key(word) {
+            Some(self.get_or_alloc_slot(word).to_asm_op())
+        } else {
+            None
         }
     }
 

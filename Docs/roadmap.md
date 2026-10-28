@@ -1,5 +1,7 @@
 # Roadmap
 
+> **Quick Summary:** Overview of Monkey C's planned language features and development roadmap, dividing upcoming milestones into near-term enhancements (multi-file projects, do-while loops, native Monkey C standard library rewrites, enums) and long-term compiler goals (variable memory sizing, heap allocation, vectors, and multithreading).
+
 This page lists what's planned for Monkey C, split into near-term work and longer-term goals. Nothing here is a promise of a timeline, it's just a record of where the language is headed. For what's already implemented, see the [token reference](./token-types.md) and [language guide](./language-guide.md).
 
 ## Todo

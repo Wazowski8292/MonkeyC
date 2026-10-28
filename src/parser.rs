@@ -71,7 +71,7 @@ impl Parser {
 
         for (index, line) in reader.lines().enumerate() {
             let line = line.map_err(|e| format!("Failed to read line {}: {}", index + 1, e))?;
-            self.parse_line(&line, index + 1);
+            self.parse_line(&line, index + 2);
         }
         Ok(())
     }
