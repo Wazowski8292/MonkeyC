@@ -22,7 +22,7 @@ impl SemanticAnalyzer {
         } else if index.is_some() {
             self.add_found_identificador(entry_info);
         } else {
-            report!(self.file_name.clone(), word.line.unwrap_or(0), word.char_num.unwrap_or(0), "Undefined symbol: {}", word.word,);
+            report!(self.file_name.clone(), crate::error_handler::error_codes::ErrorCodes::UndefinedSymbol, word.line.unwrap_or(0), word.char_num.unwrap_or(0), "Undefined symbol: {}", word.word,);
         }
     }
 
@@ -115,6 +115,7 @@ impl SemanticAnalyzer {
             Member::Missing(struct_name) => {
                 report!(
                     self.file_name.clone(),
+                    crate::error_handler::error_codes::ErrorCodes::InvalidMemberAccess,
                     word.line.unwrap_or(0),
                     word.char_num.unwrap_or(0),
                     "'{}' is neither a field nor a method of struct '{}'",

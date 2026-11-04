@@ -1,3 +1,6 @@
+pub mod error_codes;
+pub mod warning_codes;
+
 use std::cell::RefCell;
 
 #[derive(Clone)]
@@ -6,6 +9,7 @@ pub struct Diagnostic {
     pub line: usize,
     pub col: usize,
     pub msg: String,
+    pub code: String,  // e.g. "E001"
 }
 
 pub struct ErrorHandler {
@@ -27,21 +31,23 @@ impl ErrorHandler {
         self.source = src;
     }
 
-    pub fn add_warning(&mut self, line: usize, col: usize, msg: String, file_name: String) {
+    pub fn add_warning(&mut self, warning_code: warning_codes::WarningCodes, line: usize, col: usize, msg: String, file_name: String) {
         self.warnings.push(Diagnostic {
             file_name,
             line,
             col,
             msg,
+            code: warning_code.code(),
         });
     }
 
-    pub fn add_error(&mut self, line: usize, col: usize, msg: String, file_name: String) {
+    pub fn add_error(&mut self, error_code: error_codes::ErrorCodes, line: usize, col: usize, msg: String, file_name: String) {
         self.errors.push(Diagnostic {
             file_name,
             line,
             col,
             msg,
+            code: error_code.code(),
         });
     }
 
@@ -55,7 +61,7 @@ impl ErrorHandler {
 
     fn print_diagnostics(&self, diagnostics: Vec<Diagnostic>, diagnostic_type: String) {
         for diagnostic in diagnostics.iter() {
-            println!("\n[{}]: {}", diagnostic_type, diagnostic.msg);
+            println!("\n[{}] ({}): {}", diagnostic_type, diagnostic.code, diagnostic.msg);
             println!("--> {} line:{}, char pos :{}", diagnostic.file_name, diagnostic.line.to_string(), diagnostic.col.to_string());
             println!();
 
@@ -130,7 +136,7 @@ impl ErrorHandler {
 
     pub fn print_all_errors(&self) {
         let len = self.errors.len();
-        self.print_diagnostics(self.errors.clone(), "Warning".to_string());
+        self.print_diagnostics(self.errors.clone(), "Error".to_string());
 
         println!(
             "There {} {} compiler error{}. Please fix the compiler error{} before compiling.",
@@ -152,18 +158,18 @@ pub fn with_handler<R>(f: impl FnOnce(&mut ErrorHandler) -> R) -> R {
 
 #[macro_export]
 macro_rules! report {
-    ($file_name:expr, $line:expr, $col:expr, $($arg:tt)*) => {
+    ($file_name:expr, $error_code:expr, $line:expr, $col:expr, $($arg:tt)*) => {
         $crate::error_handler::with_handler(|h| {
-            h.add_error($line as usize, $col as usize, format!($($arg)*), $file_name)
+            h.add_error($error_code, $line as usize, $col as usize, format!($($arg)*), $file_name)
         })
     };
 }
 
 #[macro_export]
 macro_rules! warn {
-    ($file_name:expr, $line:expr, $col:expr, $($arg:tt)*) => {
+    ($file_name:expr, $warning_code:expr, $line:expr, $col:expr, $($arg:tt)*) => {
         $crate::error_handler::with_handler(|h| {
-            h.add_warning($line as usize, $col as usize, format!($($arg)*), $file_name)
+            h.add_warning($warning_code, $line as usize, $col as usize, format!($($arg)*), $file_name)
         })
     };
 }

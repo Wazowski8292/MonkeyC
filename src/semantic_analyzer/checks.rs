@@ -29,6 +29,7 @@ impl SemanticAnalyzer {
                 if actual_type != expected_type {
                     report!(
                         self.file_name.clone(),
+                        crate::error_handler::error_codes::ErrorCodes::TypeMismatch,
                         word.line.unwrap_or(0),
                         word.char_num.unwrap_or(0),
                         "Type mismatch for argument {} of function call: expected {:?}, got {:?}",
@@ -61,6 +62,7 @@ impl SemanticAnalyzer {
 
                 report!(
                     self.file_name.clone(),
+                    crate::error_handler::error_codes::ErrorCodes::TypeMismatch,
                     word.line.unwrap_or(0),
                     word.char_num.unwrap_or(0),
                     "Pointer kind mismatch for argument {} of function call: expected {}, got {}",
@@ -79,6 +81,7 @@ impl SemanticAnalyzer {
             if ret_type != expected_type {
                 report!(
                     self.file_name.clone(),
+                    crate::error_handler::error_codes::ErrorCodes::TypeMismatch,
                     word.line.unwrap_or(0),
                     word.char_num.unwrap_or(0),
                     "Type mismatch: variable is '{}' but function '{}' returns '{}'",
@@ -102,6 +105,7 @@ impl SemanticAnalyzer {
             if argument_variable_info.fc_params_len >= argument_variable_info.expected_fc_params {
                 report!(
                     self.file_name.clone(),
+                    crate::error_handler::error_codes::ErrorCodes::ParameterLengthMismatch,
                     word.line.unwrap_or(0),
                     word.char_num.unwrap_or(0),
                     "Too many arguments for function call. Expected: {}, Found: {}",
@@ -120,7 +124,7 @@ impl SemanticAnalyzer {
             && !word.word.starts_with("self[")
             && word.word != "self"
         {
-            report!(self.file_name.clone(), word.line.unwrap_or(0), word.char_num.unwrap_or(0), "Undefined symbol: {}", word.word,);
+            report!(self.file_name.clone(), crate::error_handler::error_codes::ErrorCodes::UndefinedSymbol, word.line.unwrap_or(0), word.char_num.unwrap_or(0), "Undefined symbol: {}", word.word,);
         }
     }
 
@@ -163,7 +167,7 @@ impl SemanticAnalyzer {
                 }
             }
             None => {
-                report!(self.file_name.clone(), word.line.unwrap_or(0), word.char_num.unwrap_or(0), "There wasn't a last entry",);
+                report!(self.file_name.clone(), crate::error_handler::error_codes::ErrorCodes::MissingEntry, word.line.unwrap_or(0), word.char_num.unwrap_or(0), "There wasn't a last entry",);
 
                 return;
             }
@@ -178,6 +182,7 @@ impl SemanticAnalyzer {
             };
             report!(
                 self.file_name.clone(),
+                crate::error_handler::error_codes::ErrorCodes::TypeMismatch,
                 word.line.unwrap_or(0),
                 word.char_num.unwrap_or(0),
                 "Type mismatch. Expected: {}{}, Found: {}",
@@ -221,6 +226,7 @@ impl SemanticAnalyzer {
         if &literal_declared != var_type {
             report!(
                 self.file_name.clone(),
+                crate::error_handler::error_codes::ErrorCodes::TypeMismatch,
                 value_word.line.unwrap_or(0),
                 value_word.char_num.unwrap_or(0),
                 "Type mismatch. Expected: {}, Found: {}",
@@ -238,6 +244,7 @@ impl SemanticAnalyzer {
         if already_declared {
             report!(
                 self.file_name.clone(),
+                crate::error_handler::error_codes::ErrorCodes::VariableRedeclaration,
                 word.line.unwrap_or(0),
                 word.char_num.unwrap_or(0),
                 "Variable '{}' is already declared in this scope",
@@ -250,7 +257,7 @@ impl SemanticAnalyzer {
     pub(super) fn check_duplicate_function(&self, name: &str, word: &Word) {
         let already_declared = self.table.iter().any(|entry| matches!(entry, TableTypes::Function(f) if f.name.as_deref() == Some(name)));
         if already_declared {
-            report!(self.file_name.clone(), word.line.unwrap_or(0), word.char_num.unwrap_or(0), "Function '{}' is already defined", name,);
+            report!(self.file_name.clone(), crate::error_handler::error_codes::ErrorCodes::FunctionRedeclaration, word.line.unwrap_or(0), word.char_num.unwrap_or(0), "Function '{}' is already defined", name,);
         }
     }
 
@@ -258,7 +265,7 @@ impl SemanticAnalyzer {
     pub(super) fn check_main_exists(&self) {
         let has_main = self.table.iter().any(|entry| matches!(entry, TableTypes::Function(f) if f.name.as_deref() == Some("main")));
         if !has_main {
-            report!(self.file_name.clone(), 0, 0, "No 'main' function found",);
+            report!(self.file_name.clone(), crate::error_handler::error_codes::ErrorCodes::NoMainFunction, 0, 0, "No 'main' function found",);
         }
     }
 
@@ -280,6 +287,7 @@ impl SemanticAnalyzer {
         if actual_len < expected {
             report!(
                 self.file_name.clone(),
+                crate::error_handler::error_codes::ErrorCodes::ParameterLengthMismatch,
                 word.line.unwrap_or(0),
                 word.char_num.unwrap_or(0),
                 "Too few arguments for function call. Expected: {}, Found: {}",
@@ -322,7 +330,7 @@ impl SemanticAnalyzer {
                 });
 
                 if found_in_struct_method.is_none() {
-                    report!(self.file_name.clone(), word.line.unwrap_or(0), word.char_num.unwrap_or(0), "Undefined symbol: {}", word.word,);
+                    report!(self.file_name.clone(), crate::error_handler::error_codes::ErrorCodes::UndefinedSymbol, word.line.unwrap_or(0), word.char_num.unwrap_or(0), "Undefined symbol: {}", word.word,);
                 }
             }
         }
@@ -344,6 +352,7 @@ impl SemanticAnalyzer {
             if !matches!(token_type, TokenType::StructDef(_)) {
                 report!(
                     self.file_name.clone(),
+                    crate::error_handler::error_codes::ErrorCodes::InvalidMemberAccess,
                     word.line.unwrap_or(0),
                     word.char_num.unwrap_or(0),
                     "Cannot call method '{}' on non-struct variable '{}' of type '{}'",

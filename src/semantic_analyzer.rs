@@ -7,6 +7,7 @@ mod members;
 mod new_entry;
 mod normalize;
 mod resolve;
+mod import;
 pub mod table;
 pub mod tokens;
 
@@ -236,6 +237,7 @@ impl SemanticAnalyzer {
             TokenType::Assembly => {
                 warn!(
                     self.file_name.clone(),
+                    crate::error_handler::warning_codes::WarningCodes::UnsafeAssembly,
                     word.line.unwrap_or(0).clone(),
                     word.char_num.unwrap_or(0).clone(),
                     "The Monkey C compiler does not verify asmembly, you must check it by your self and remeber that the asmbler will return an error if it is the case, but it will not go through this compiler"
@@ -347,12 +349,11 @@ pub fn analyze_semantically(stack: Vec<Block>, file_name: String, debug: bool) -
     let mut semantic_analyzer: SemanticAnalyzer = SemanticAnalyzer::new(file_name);
     semantic_analyzer.analyze(stack);
 
-    // Post-analysis whole-program checks.
     semantic_analyzer.check_main_exists();
 
     if debug {
         debug::print(&semantic_analyzer.table.clone());
-        println!("{:#?}", semantic_analyzer.table);
+        //println!("{:#?}", semantic_analyzer.table);
     }
 
     semantic_analyzer.table
