@@ -21,6 +21,23 @@ pub enum PointerType {
 }
 
 #[derive(Debug, PartialEq, Clone)]
+pub enum Modifire {
+    Constant,
+    Public,
+    None,
+}
+
+impl Modifire {
+    pub fn from_token(token: TokenType) -> Modifire {
+        match token {
+            TokenType::Const => Modifire::Constant,
+            TokenType::Public => Modifire::Public,
+            _ => Modifire::None,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub struct Variable {
     pub token_type: TokenType,
     pub value: Option<Vec<Value>>,
@@ -28,6 +45,7 @@ pub struct Variable {
     pub ptr: Option<PointerType>,
     pub is_array: bool,
     pub array_size: Option<usize>,
+    pub modifire: Vec<Modifire>, 
 }
 
 impl Variable {
@@ -68,6 +86,7 @@ impl Types for Variable {
             ptr: None,
             is_array: false,
             array_size: None,
+            modifire: vec![],
         }
     }
 
@@ -96,6 +115,7 @@ pub struct Function {
     pub name: Option<String>,
     pub table: Vec<TableTypes>,
     pub return_type: Option<TokenType>,
+    pub modifire: Vec<Modifire>, 
 }
 
 impl Types for Function {
@@ -105,6 +125,7 @@ impl Types for Function {
             name: None,
             table: vec![],
             return_type: None,
+            modifire: vec![],
         }
     }
 
@@ -134,6 +155,7 @@ pub struct Reasingment {
     pub token_type: TokenType,
     pub ptr: Option<PointerType>,
     pub array_index: Option<String>,
+    pub modifire: Vec<Modifire>, 
 }
 
 impl Reasingment {
@@ -162,6 +184,7 @@ impl Types for Reasingment {
             token_type: TokenType::Unknow,
             ptr: None,
             array_index: None,
+            modifire: vec![],
         }
     }
 

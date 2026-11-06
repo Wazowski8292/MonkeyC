@@ -16,7 +16,7 @@ pub use tokens::*;
 use crate::enbeded_funcs::FUNCTIONS;
 use crate::parser::{Block, Word};
 use crate::semantic_analyzer::add_arguments::ArgumentVariableInfo;
-use crate::variable_types::{FunctionCall, Include, PointerType};
+use crate::variable_types::{FunctionCall, Include, PointerType, Modifire};
 use crate::warn;
 use std::vec::Vec;
 
@@ -49,6 +49,7 @@ struct SemanticAnalyzer {
     dependencies: Vec<Include>,
     pending_checks: Vec<String>,
     current_import_struct: Option<String>,
+    modifires: Vec<Modifire>,
 }
 
 impl SemanticAnalyzer {
@@ -68,6 +69,7 @@ impl SemanticAnalyzer {
             dependencies: vec![], 
             pending_checks: vec![],
             current_import_struct: None,
+            modifires: vec![],
         }
     }
 
@@ -139,7 +141,10 @@ impl SemanticAnalyzer {
 
         for word in words {
             self.tokenize_word(word);
-            self.last_finished = false;
+            
+            if !(self.last_finished && !self.modifires.is_empty()) {
+                self.last_finished = false;
+            }
         }
 
         self.current_import_struct = None;
@@ -299,6 +304,10 @@ impl SemanticAnalyzer {
             TokenType::Import => {
                 return false;
             }
+            TokenType::Const | TokenType::Public => {
+                self.modifires.push(Modifire::from_token(token));
+                return false;
+            }
             _ => return true,
         }
     }
@@ -444,6 +453,7 @@ pub fn analyze_semantically(stack: Vec<Block>, file_name: String, debug: bool) -
 
     if debug {
         debug::print(&semantic_analyzer.table.clone());
+        println!("{:#?}", semantic_analyzer.table);
     }
 
     (semantic_analyzer.table, semantic_analyzer.dependencies, semantic_analyzer.pending_checks)

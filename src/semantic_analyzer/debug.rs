@@ -17,7 +17,8 @@ fn format_item(item: &TableTypes, level: usize) -> String {
         TableTypes::Variable(v) => {
             let array_note = if v.is_array { format!(" [array; size={:?}]", v.array_size) } else { String::new() };
             format!(
-                "{p}var {}{}: {:?} = {}{}",
+                "{p}{:?} var {}{}: {:?} = {}{}",
+                v.modifire,
                 format_ptr(&v.ptr),
                 v.name.clone().unwrap_or_else(|| "_".to_string()),
                 v.token_type,
@@ -28,7 +29,7 @@ fn format_item(item: &TableTypes, level: usize) -> String {
 
         TableTypes::Function(f) => {
             let ret = f.return_type.as_ref().map(|t| t.to_str()).unwrap_or_else(|| "void".to_string());
-            let header = format!("{p}fn {}() -> {} {{", f.name.clone().unwrap_or_else(|| "_".to_string()), ret);
+            let header = format!("{p}{:?} fn {}() -> {} {{", f.modifire, f.name.clone().unwrap_or_else(|| "_".to_string()), ret);
             let body = format_table(&f.table, level + 1);
             format!("{header}\n{body}\n{p}}}")
         }
@@ -37,7 +38,8 @@ fn format_item(item: &TableTypes, level: usize) -> String {
             let params = r.parameters.as_ref().map(|p| p.iter().map(format_item_inline).collect::<Vec<_>>().join(", ")).unwrap_or_default();
             let idx = r.array_index.as_ref().map(|i| format!("[{}]", i)).unwrap_or_default();
             format!(
-                "{p}{}{}{} = {}  ({:?}, scope={:?}, target={})",
+                "{p}{:?} {}{}{} = {}  ({:?}, scope={:?}, target={})",
+                r.modifire,
                 format_ptr(&r.ptr),
                 r.name,
                 idx,

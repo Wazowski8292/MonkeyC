@@ -40,6 +40,9 @@ pub enum TokenType {
     StringLiteral,
     BoolLiteral,
 
+    Const,
+    Public,
+
     FnLiteral,
     Return,
     ReturnType,
@@ -97,6 +100,9 @@ impl TokenType {
             "<<" => TokenType::LeftBitShift,
             "&" => TokenType::And,
             "|" => TokenType::Or,
+            
+            "const" => TokenType::Const,
+            "pub" => TokenType::Public,
 
             "fn" => TokenType::FnLiteral,
             "return" => TokenType::Return,
@@ -161,6 +167,9 @@ impl TokenType {
             TokenType::LeftBitShift => "<<".to_string(),
             TokenType::And => "&".to_string(),
             TokenType::Or => "|".to_string(),
+
+            TokenType::Const => "const".to_string(),
+            TokenType::Public => "pub".to_string(),
 
             TokenType::FnLiteral => "fn".to_string(),
             TokenType::Return => "return".to_string(),
