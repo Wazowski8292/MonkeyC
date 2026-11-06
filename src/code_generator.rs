@@ -723,11 +723,7 @@ impl CodeGen {
     }
 
     fn resolve_slot_operand(&mut self, word: &str) -> Option<String> {
-        if self.slot_map.contains_key(word) {
-            Some(self.get_or_alloc_slot(word).to_asm_op())
-        } else {
-            None
-        }
+        if self.slot_map.contains_key(word) { Some(self.get_or_alloc_slot(word).to_asm_op()) } else { None }
     }
 
     // Returns values

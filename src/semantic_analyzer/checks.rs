@@ -124,7 +124,14 @@ impl SemanticAnalyzer {
             && !word.word.starts_with("self[")
             && word.word != "self"
         {
-            report!(self.file_name.clone(), crate::error_handler::error_codes::ErrorCodes::UndefinedSymbol, word.line.unwrap_or(0), word.char_num.unwrap_or(0), "Undefined symbol: {}", word.word,);
+            report!(
+                self.file_name.clone(),
+                crate::error_handler::error_codes::ErrorCodes::UndefinedSymbol,
+                word.line.unwrap_or(0),
+                word.char_num.unwrap_or(0),
+                "Undefined symbol: {}",
+                word.word,
+            );
         }
     }
 
@@ -167,7 +174,13 @@ impl SemanticAnalyzer {
                 }
             }
             None => {
-                report!(self.file_name.clone(), crate::error_handler::error_codes::ErrorCodes::MissingEntry, word.line.unwrap_or(0), word.char_num.unwrap_or(0), "There wasn't a last entry",);
+                report!(
+                    self.file_name.clone(),
+                    crate::error_handler::error_codes::ErrorCodes::MissingEntry,
+                    word.line.unwrap_or(0),
+                    word.char_num.unwrap_or(0),
+                    "There wasn't a last entry",
+                );
 
                 return;
             }
@@ -257,7 +270,14 @@ impl SemanticAnalyzer {
     pub(super) fn check_duplicate_function(&self, name: &str, word: &Word) {
         let already_declared = self.table.iter().any(|entry| matches!(entry, TableTypes::Function(f) if f.name.as_deref() == Some(name)));
         if already_declared {
-            report!(self.file_name.clone(), crate::error_handler::error_codes::ErrorCodes::FunctionRedeclaration, word.line.unwrap_or(0), word.char_num.unwrap_or(0), "Function '{}' is already defined", name,);
+            report!(
+                self.file_name.clone(),
+                crate::error_handler::error_codes::ErrorCodes::FunctionRedeclaration,
+                word.line.unwrap_or(0),
+                word.char_num.unwrap_or(0),
+                "Function '{}' is already defined",
+                name,
+            );
         }
     }
 
@@ -265,7 +285,13 @@ impl SemanticAnalyzer {
     pub(super) fn check_main_exists(&self) {
         let has_main = self.table.iter().any(|entry| matches!(entry, TableTypes::Function(f) if f.name.as_deref() == Some("main")));
         if !has_main {
-            report!(self.file_name.clone(), crate::error_handler::error_codes::ErrorCodes::NoMainFunction, 0, 0, "No 'main' function found",);
+            report!(
+                self.file_name.clone(),
+                crate::error_handler::error_codes::ErrorCodes::NoMainFunction,
+                0,
+                0,
+                "No 'main' function found",
+            );
         }
     }
 
@@ -330,7 +356,14 @@ impl SemanticAnalyzer {
                 });
 
                 if found_in_struct_method.is_none() {
-                    report!(self.file_name.clone(), crate::error_handler::error_codes::ErrorCodes::UndefinedSymbol, word.line.unwrap_or(0), word.char_num.unwrap_or(0), "Undefined symbol: {}", word.word,);
+                    report!(
+                        self.file_name.clone(),
+                        crate::error_handler::error_codes::ErrorCodes::UndefinedSymbol,
+                        word.line.unwrap_or(0),
+                        word.char_num.unwrap_or(0),
+                        "Undefined symbol: {}",
+                        word.word,
+                    );
                 }
             }
         }

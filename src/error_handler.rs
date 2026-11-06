@@ -9,7 +9,7 @@ pub struct Diagnostic {
     pub line: usize,
     pub col: usize,
     pub msg: String,
-    pub code: String,  // e.g. "E001"
+    pub code: String, // e.g. "E001"
 }
 
 pub struct ErrorHandler {

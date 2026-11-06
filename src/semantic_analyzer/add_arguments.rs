@@ -59,7 +59,13 @@ impl SemanticAnalyzer {
         let new_entry = match self.active_table().last_mut() {
             Some(entry) => entry,
             None => {
-                report!(self.file_name.clone(), crate::error_handler::error_codes::ErrorCodes::MissingEntry, word.line.unwrap_or(0), word.char_num.unwrap_or(0), "There wasn't a last entry");
+                report!(
+                    self.file_name.clone(),
+                    crate::error_handler::error_codes::ErrorCodes::MissingEntry,
+                    word.line.unwrap_or(0),
+                    word.char_num.unwrap_or(0),
+                    "There wasn't a last entry"
+                );
                 return;
             }
         };
