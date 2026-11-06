@@ -21,7 +21,7 @@ pub struct Flags {
 pub struct Dependencies {
     file: String,
     modules: Vec<String>,
-    //pending_checks:  TODO;
+    pending_checks: Vec<String>,
 }
 
 pub struct Head {
@@ -66,13 +66,23 @@ impl Head {
         let (parsed_text, file_str) = parsed_text.expect("parsing failed");
 
         error_handler::with_handler(|h| h.set_source(file_str));
-        let type_table = analyze_semantically(parsed_text, file_name.clone(), flags.semantic_analyzer_debug);
+        let (type_table, depen, pending_checks) = analyze_semantically(parsed_text, file_name.clone(), flags.semantic_analyzer_debug);
 
         if Self::print_errors_and_warnings() {
             return Err(());
         }
 
-        Ok((type_table, vec![]))
+        
+        let mut dependencies = vec![];
+        for dependency in depen.iter() {
+            dependencies.push( Dependencies {
+                file: file_name.clone(),
+                modules: dependency.modules.clone(),
+                pending_checks: pending_checks.clone() 
+            });
+        }
+
+        Ok((type_table, dependencies))
     }
 
     fn finish_compilation(&self, file_name: String, table_type: Vec<TableTypes>) {

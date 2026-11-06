@@ -1,6 +1,6 @@
 use super::tokens::TokenType;
 use crate::variable_types::{
-    Conditional, Function, FunctionCall, InlineAssembly, Loop, Reasingment, Return, StructLiteral, Types, Variable,
+    Conditional, Function, FunctionCall, InlineAssembly, Loop, Reasingment, Return, StructLiteral, Types, Variable, Include
 };
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -29,6 +29,7 @@ pub enum TableTypes {
     Return(Return),
     StructLiteral(StructLiteral),
     InlineAssembly(InlineAssembly),
+    Dependencies(Include),
     Unknown,
 }
 
@@ -53,6 +54,7 @@ impl TableTypes {
             | TokenType::StructDef(_) => TableTypes::Variable(Variable::new(token)),
             TokenType::StructLiteral => TableTypes::StructLiteral(StructLiteral::new(token)),
             TokenType::Assembly => TableTypes::InlineAssembly(InlineAssembly::new(token)),
+            TokenType::Include => TableTypes::Dependencies(Include::new(token)),
             _ if TokenType::is_value(token.clone()) && token.clone() != TokenType::Unknow => TableTypes::Variable(Variable::new(token)),
             _ => TableTypes::Unknown,
         }
@@ -69,6 +71,7 @@ impl TableTypes {
             TableTypes::Return(returns) => returns.add_arguments(argument),
             TableTypes::StructLiteral(struct_literal) => struct_literal.add_arguments(argument),
             TableTypes::InlineAssembly(asm) => asm.add_arguments(argument),
+            TableTypes::Dependencies(dependency) => dependency.add_arguments(argument),
             _ => {}
         }
     }

@@ -70,8 +70,44 @@ impl SemanticAnalyzer {
 
         let lookup_name = parse_array_syntax(&name).map(|(array_name, _)| array_name).unwrap_or(name);
 
-        Self::resolve_in_chain(&lookup_name, &mut self.table, 0, self.max_nesting, self.defining_parameters)
-            .or_else(|| self.resolve_in_parameters(&lookup_name))
+        let local = Self::resolve_in_chain(&lookup_name, &mut self.table, 0, self.max_nesting, self.defining_parameters)
+            .or_else(|| self.resolve_in_parameters(&lookup_name));
+
+        if local.is_some() {
+            return local;
+        }
+
+        self.resolve_imported(&lookup_name)
+    }
+
+    pub(super) fn resolve_imported(&self, name: &str) -> Option<Resolution> {
+        if let Some((mod_name, symbol)) = name.split_once("::") {
+            for dep in &self.dependencies {
+                let stem = std::path::Path::new(&dep.file)
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or(&dep.file);
+                if stem == mod_name && dep.modules.iter().any(|m| m == symbol) {
+                    let is_struct = self.current_import_struct.as_deref() == Some(symbol)
+                        || symbol.chars().next().map_or(false, |c| c.is_uppercase());
+                    let resolve_type = if is_struct {
+                        ResolveType::Struct
+                    } else {
+                        ResolveType::Function
+                    };
+                    return Some((0, Scope::Root, resolve_type));
+                }
+            }
+            return None;
+        }
+
+        if let Some(ref sym) = self.current_import_struct {
+            if sym == name {
+                return Some((0, Scope::Root, ResolveType::Struct));
+            }
+        }
+
+        None
     }
 
     pub(super) fn resolve_in_chain(

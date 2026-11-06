@@ -16,7 +16,7 @@ pub use tokens::*;
 use crate::enbeded_funcs::FUNCTIONS;
 use crate::parser::{Block, Word};
 use crate::semantic_analyzer::add_arguments::ArgumentVariableInfo;
-use crate::variable_types::{FunctionCall, PointerType};
+use crate::variable_types::{FunctionCall, Include, PointerType};
 use crate::warn;
 use std::vec::Vec;
 
@@ -46,6 +46,9 @@ struct SemanticAnalyzer {
     ptr_type: Option<PointerType>,
     current_struct_init: Option<String>,
     last_finished: bool,
+    dependencies: Vec<Include>,
+    pending_checks: Vec<String>,
+    current_import_struct: Option<String>,
 }
 
 impl SemanticAnalyzer {
@@ -62,6 +65,9 @@ impl SemanticAnalyzer {
             ptr_type: None,
             current_struct_init: None,
             last_finished: false,
+            dependencies: vec![], 
+            pending_checks: vec![],
+            current_import_struct: None,
         }
     }
 
@@ -129,10 +135,56 @@ impl SemanticAnalyzer {
 
         let Some(mut words) = normalize::normalize_line(line) else { return };
         self.rewrite_self_fields(&mut words);
+        self.check_and_record_pending(&mut words);
 
         for word in words {
             self.tokenize_word(word);
             self.last_finished = false;
+        }
+
+        self.current_import_struct = None;
+        self.sync_dependencies();
+    }
+
+    fn check_and_record_pending(&mut self, words: &mut Vec<Word>) {
+        if words.is_empty() {
+            return;
+        }
+
+        let mut i = 0;
+        let mut found_qualified = false;
+        while i + 2 < words.len() {
+            if words[i + 1].word == "::" && self.is_qualified_module_symbol(&words[i].word, &words[i + 2].word) {
+                found_qualified = true;
+                let symbol = words[i + 2].word.clone();
+                if i + 3 < words.len() || symbol.chars().next().map_or(false, |c| c.is_uppercase()) {
+                    self.current_import_struct = Some(symbol.clone());
+                }
+                words[i].word = symbol;
+                words.drain(i + 1..i + 3);
+            } else {
+                i += 1;
+            }
+        }
+
+        if found_qualified {
+            let line_words: Vec<String> = words
+                .iter()
+                .map(|w| {
+                    if let Some(mod_name) = self.find_module_for_symbol(&w.word) {
+                        format!("{}::{}", mod_name, w.word)
+                    } else {
+                        w.word.clone()
+                    }
+                })
+                .collect();
+            let mut line_str = line_words.join(" ");
+            if !line_str.ends_with(';') {
+                line_str.push(';');
+            }
+            if !self.pending_checks.contains(&line_str) {
+                self.pending_checks.push(line_str);
+            }
         }
     }
 
@@ -244,6 +296,9 @@ impl SemanticAnalyzer {
 
                 return true;
             }
+            TokenType::Import => {
+                return false;
+            }
             _ => return true,
         }
     }
@@ -342,9 +397,46 @@ impl SemanticAnalyzer {
             _ => None,
         }
     }
+
+    pub(super) fn sync_dependencies(&mut self) {
+        self.dependencies.clear();
+        for entry in &self.table {
+            if let TableTypes::Dependencies(inc) = entry {
+                if !inc.file.is_empty() {
+                    self.dependencies.push(inc.clone());
+                }
+            }
+        }
+    }
+
+    fn find_module_for_symbol(&self, symbol: &str) -> Option<String> {
+        for dep in &self.dependencies {
+            if dep.modules.iter().any(|m| m == symbol) {
+                let stem = std::path::Path::new(&dep.file)
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or(&dep.file);
+                return Some(stem.to_string());
+            }
+        }
+        None
+    }
+
+    fn is_qualified_module_symbol(&self, mod_name: &str, symbol: &str) -> bool {
+        for dep in &self.dependencies {
+            let stem = std::path::Path::new(&dep.file)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or(&dep.file);
+            if stem == mod_name && dep.modules.iter().any(|m| m == symbol) {
+                return true;
+            }
+        }
+        false
+    }
 }
 
-pub fn analyze_semantically(stack: Vec<Block>, file_name: String, debug: bool) -> Vec<TableTypes> {
+pub fn analyze_semantically(stack: Vec<Block>, file_name: String, debug: bool) -> (Vec<TableTypes>, Vec<Include>, Vec<String>) {
     let mut semantic_analyzer: SemanticAnalyzer = SemanticAnalyzer::new(file_name);
     semantic_analyzer.analyze(stack);
 
@@ -352,8 +444,7 @@ pub fn analyze_semantically(stack: Vec<Block>, file_name: String, debug: bool) -
 
     if debug {
         debug::print(&semantic_analyzer.table.clone());
-        //println!("{:#?}", semantic_analyzer.table);
     }
 
-    semantic_analyzer.table
+    (semantic_analyzer.table, semantic_analyzer.dependencies, semantic_analyzer.pending_checks)
 }

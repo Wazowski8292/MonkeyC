@@ -55,6 +55,10 @@ pub enum TokenType {
     DoWhileLoop,
 
     Dots,
+
+    Include,
+    Import,
+
     Unknow,
 }
 
@@ -107,6 +111,9 @@ impl TokenType {
             "::" => TokenType::Dots,
 
             "asm" => TokenType::Assembly,
+    
+            "include" => TokenType::Include,
+            "import" => TokenType::Import,
 
             "true" | "false" => TokenType::BoolLiteral,
 
@@ -176,6 +183,9 @@ impl TokenType {
             TokenType::Dots => "::".to_string(),
 
             TokenType::Assembly => "asm".to_string(),
+
+            TokenType::Include => "include".to_string(),
+            TokenType::Import => "import".to_string(),
 
             TokenType::Unknow => "<unknown>".to_string(),
         }

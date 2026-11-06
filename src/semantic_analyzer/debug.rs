@@ -94,6 +94,10 @@ fn format_item(item: &TableTypes, level: usize) -> String {
             format!("{p}asm: {:?}", asm.table)
         }
 
+        TableTypes::Dependencies(dependency) => {
+            format!("{p}include {} import {:?}", dependency.file, dependency.modules)
+        }
+
         TableTypes::Unknown => {
             format!("{p}<unknown>")
         }

@@ -353,6 +353,7 @@ impl Types for StructLiteral {
         self.name = argument;
     }
 }
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct InlineAssembly {
     pub table: Vec<String>,
@@ -371,3 +372,36 @@ impl Types for InlineAssembly {
         self.alloc_size = argument.parse::<usize>().unwrap();
     }
 }
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct Include {
+    pub file: String,
+    pub modules: Vec<String>,
+}
+
+impl Types for Include {
+    fn new(_: TokenType) -> Self {
+        Self {
+            file: String::new(),
+            modules: vec![],
+        }
+    }
+
+    fn add_arguments(&mut self, argument: String) {
+        if self.file.is_empty() {
+            self.file = argument;
+        } else {
+            self.modules.push(argument);
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct PendingCheck {
+    pub module: String,
+    pub symbol: String,
+    pub line: usize,
+    pub char_num: usize,
+}
+
+
