@@ -83,18 +83,11 @@ impl SemanticAnalyzer {
     pub(super) fn resolve_imported(&self, name: &str) -> Option<Resolution> {
         if let Some((mod_name, symbol)) = name.split_once("::") {
             for dep in &self.dependencies {
-                let stem = std::path::Path::new(&dep.file)
-                    .file_stem()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or(&dep.file);
+                let stem = std::path::Path::new(&dep.file).file_stem().and_then(|s| s.to_str()).unwrap_or(&dep.file);
                 if stem == mod_name && dep.modules.iter().any(|m| m == symbol) {
-                    let is_struct = self.current_import_struct.as_deref() == Some(symbol)
-                        || symbol.chars().next().map_or(false, |c| c.is_uppercase());
-                    let resolve_type = if is_struct {
-                        ResolveType::Struct
-                    } else {
-                        ResolveType::Function
-                    };
+                    let is_struct =
+                        self.current_import_struct.as_deref() == Some(symbol) || symbol.chars().next().map_or(false, |c| c.is_uppercase());
+                    let resolve_type = if is_struct { ResolveType::Struct } else { ResolveType::Function };
                     return Some((0, Scope::Root, resolve_type));
                 }
             }

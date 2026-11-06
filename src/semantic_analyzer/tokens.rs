@@ -100,7 +100,7 @@ impl TokenType {
             "<<" => TokenType::LeftBitShift,
             "&" => TokenType::And,
             "|" => TokenType::Or,
-            
+
             "const" => TokenType::Const,
             "pub" => TokenType::Public,
 
@@ -117,7 +117,7 @@ impl TokenType {
             "::" => TokenType::Dots,
 
             "asm" => TokenType::Assembly,
-    
+
             "include" => TokenType::Include,
             "import" => TokenType::Import,
 

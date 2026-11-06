@@ -17,14 +17,11 @@ impl SemanticAnalyzer {
 
         if !TokenType::is_value(token.clone()) {
             self.add_entry(token.clone());
-
         } else if let Some(inst_name) = self.current_struct_init.clone() {
             self.add_struct_parameters(inst_name, entry_info);
         } else if index.is_some() {
-
             self.add_found_identificador(entry_info);
         } else {
-            
             report!(
                 self.file_name.clone(),
                 crate::error_handler::error_codes::ErrorCodes::UndefinedSymbol,
@@ -39,16 +36,16 @@ impl SemanticAnalyzer {
     fn add_entry(&mut self, token: TokenType) {
         let mut table_type: TableTypes = TableTypes::from_token(token.clone());
         match table_type {
-            TableTypes::Variable(ref mut var) => { 
-                var.ptr = self.ptr_type.clone(); 
+            TableTypes::Variable(ref mut var) => {
+                var.ptr = self.ptr_type.clone();
                 var.modifire = self.modifires.clone();
                 self.modifires.clear();
             }
-            TableTypes::Reasingment(ref mut re) => { 
+            TableTypes::Reasingment(ref mut re) => {
                 re.ptr = self.ptr_type.clone();
                 re.modifire = self.modifires.clone();
                 self.modifires.clear();
-            },
+            }
             TableTypes::Function(ref mut func) => {
                 func.modifire = self.modifires.clone();
                 self.modifires.clear();

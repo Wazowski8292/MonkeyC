@@ -16,7 +16,7 @@ pub use tokens::*;
 use crate::enbeded_funcs::FUNCTIONS;
 use crate::parser::{Block, Word};
 use crate::semantic_analyzer::add_arguments::ArgumentVariableInfo;
-use crate::variable_types::{FunctionCall, Include, PointerType, Modifire};
+use crate::variable_types::{FunctionCall, Include, Modifire, PointerType};
 use crate::warn;
 use std::vec::Vec;
 
@@ -66,7 +66,7 @@ impl SemanticAnalyzer {
             ptr_type: None,
             current_struct_init: None,
             last_finished: false,
-            dependencies: vec![], 
+            dependencies: vec![],
             pending_checks: vec![],
             current_import_struct: None,
             modifires: vec![],
@@ -141,7 +141,7 @@ impl SemanticAnalyzer {
 
         for word in words {
             self.tokenize_word(word);
-            
+
             if !(self.last_finished && !self.modifires.is_empty()) {
                 self.last_finished = false;
             }
@@ -421,10 +421,7 @@ impl SemanticAnalyzer {
     fn find_module_for_symbol(&self, symbol: &str) -> Option<String> {
         for dep in &self.dependencies {
             if dep.modules.iter().any(|m| m == symbol) {
-                let stem = std::path::Path::new(&dep.file)
-                    .file_stem()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or(&dep.file);
+                let stem = std::path::Path::new(&dep.file).file_stem().and_then(|s| s.to_str()).unwrap_or(&dep.file);
                 return Some(stem.to_string());
             }
         }
@@ -433,10 +430,7 @@ impl SemanticAnalyzer {
 
     fn is_qualified_module_symbol(&self, mod_name: &str, symbol: &str) -> bool {
         for dep in &self.dependencies {
-            let stem = std::path::Path::new(&dep.file)
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or(&dep.file);
+            let stem = std::path::Path::new(&dep.file).file_stem().and_then(|s| s.to_str()).unwrap_or(&dep.file);
             if stem == mod_name && dep.modules.iter().any(|m| m == symbol) {
                 return true;
             }

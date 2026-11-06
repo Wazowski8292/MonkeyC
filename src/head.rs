@@ -72,13 +72,12 @@ impl Head {
             return Err(());
         }
 
-        
         let mut dependencies = vec![];
         for dependency in depen.iter() {
-            dependencies.push( Dependencies {
+            dependencies.push(Dependencies {
                 file: file_name.clone(),
                 modules: dependency.modules.clone(),
-                pending_checks: pending_checks.clone() 
+                pending_checks: pending_checks.clone(),
             });
         }
 

@@ -1,6 +1,6 @@
 use super::tokens::TokenType;
 use crate::variable_types::{
-    Conditional, Function, FunctionCall, InlineAssembly, Loop, Reasingment, Return, StructLiteral, Types, Variable, Include
+    Conditional, Function, FunctionCall, Include, InlineAssembly, Loop, Reasingment, Return, StructLiteral, Types, Variable,
 };
 
 #[derive(Debug, PartialEq, Clone, Copy)]

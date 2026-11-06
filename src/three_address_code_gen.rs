@@ -1,6 +1,6 @@
 use crate::semantic_analyzer::{Scope, TableTypes, TokenType};
 use crate::variable_types::{
-    Conditional, Function, FunctionCall, InlineAssembly, Loop, PointerType, Reasingment, Return, StructLiteral, Value, Variable, Modifire, 
+    Conditional, Function, FunctionCall, InlineAssembly, Loop, Modifire, PointerType, Reasingment, Return, StructLiteral, Value, Variable,
 };
 use std::collections::HashMap;
 use std::vec::Vec;
@@ -255,7 +255,7 @@ impl ThreeAddressCodeGenerator {
                     ptr: Some(PointerType::Reference),
                     is_array: true,
                     array_size: Some(struct_literal_length.clone()),
-                    modifire: vec![], 
+                    modifire: vec![],
                 };
                 function.parameters.get_or_insert_with(Vec::new).insert(0, TableTypes::Variable(variable));
             }

@@ -45,7 +45,7 @@ pub struct Variable {
     pub ptr: Option<PointerType>,
     pub is_array: bool,
     pub array_size: Option<usize>,
-    pub modifire: Vec<Modifire>, 
+    pub modifire: Vec<Modifire>,
 }
 
 impl Variable {
@@ -115,7 +115,7 @@ pub struct Function {
     pub name: Option<String>,
     pub table: Vec<TableTypes>,
     pub return_type: Option<TokenType>,
-    pub modifire: Vec<Modifire>, 
+    pub modifire: Vec<Modifire>,
 }
 
 impl Types for Function {
@@ -155,7 +155,7 @@ pub struct Reasingment {
     pub token_type: TokenType,
     pub ptr: Option<PointerType>,
     pub array_index: Option<String>,
-    pub modifire: Vec<Modifire>, 
+    pub modifire: Vec<Modifire>,
 }
 
 impl Reasingment {
@@ -426,5 +426,3 @@ pub struct PendingCheck {
     pub line: usize,
     pub char_num: usize,
 }
-
-

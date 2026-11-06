@@ -11,6 +11,7 @@ pub enum ErrorCodes {
     MissingEntry,
     FileNotFound,
     FileNotMonkeyC,
+    TryiedToModifyConst,
 }
 
 impl ErrorCodes {
@@ -27,6 +28,7 @@ impl ErrorCodes {
             ErrorCodes::MissingEntry => "Missing entry".to_string(),
             ErrorCodes::FileNotFound => "File not found".to_string(),
             ErrorCodes::FileNotMonkeyC => "File is not Monkey C".to_string(),
+            ErrorCodes::TryiedToModifyConst => "Tryied to modify const".to_string(),
         }
     }
 
@@ -43,6 +45,7 @@ impl ErrorCodes {
             ErrorCodes::MissingEntry => "E009".to_string(),
             ErrorCodes::FileNotFound => "E010".to_string(),
             ErrorCodes::FileNotMonkeyC => "E011".to_string(),
+            ErrorCodes::TryiedToModifyConst => "E012".to_string(),
         }
     }
 
