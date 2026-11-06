@@ -10,6 +10,7 @@ pub enum ErrorCodes {
     InvalidMemberAccess,
     MissingEntry,
     FileNotFound,
+    FileNotMonkeyC,
 }
 
 impl ErrorCodes {
@@ -25,6 +26,7 @@ impl ErrorCodes {
             ErrorCodes::InvalidMemberAccess => "Invalid member access".to_string(),
             ErrorCodes::MissingEntry => "Missing entry".to_string(),
             ErrorCodes::FileNotFound => "File not found".to_string(),
+            ErrorCodes::FileNotMonkeyC => "File is not Monkey C".to_string(),
         }
     }
 
@@ -40,6 +42,7 @@ impl ErrorCodes {
             ErrorCodes::InvalidMemberAccess => "E008".to_string(),
             ErrorCodes::MissingEntry => "E009".to_string(),
             ErrorCodes::FileNotFound => "E010".to_string(),
+            ErrorCodes::FileNotMonkeyC => "E011".to_string(),
         }
     }
 

@@ -1,6 +1,7 @@
 pub mod code_generator;
 pub mod enbeded_funcs;
 pub mod error_handler;
+pub mod head;
 pub mod parser;
 pub mod semantic_analyzer;
 pub mod three_address_code_gen;

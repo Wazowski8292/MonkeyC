@@ -3,7 +3,6 @@ mod asm;
 mod checks;
 mod cursor;
 mod debug;
-mod import;
 mod members;
 mod new_entry;
 mod normalize;
