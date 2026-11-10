@@ -2,7 +2,7 @@ mod import;
 
 use crate::code_generator::generate_assembly;
 use crate::error_handler;
-use crate::head::import::FileLoader;
+use crate::head::import::{FileLoader, FileHeader};
 use crate::parser::parse_text;
 use crate::semantic_analyzer::{analyze_semantically, table::TableTypes};
 use crate::three_address_code_gen::generate_three_address_code;
@@ -16,12 +16,6 @@ pub struct Flags {
     pub semantic_analyzer_debug: bool,
     pub tac_debug: bool,
     pub full_debug: bool,
-}
-
-pub struct Dependencies {
-    file: String,
-    modules: Vec<String>,
-    pending_checks: Vec<String>,
 }
 
 pub struct Head {
@@ -38,20 +32,35 @@ impl Head {
     }
 
     pub fn compile(&mut self, file_name: String) {
-        self.loader.handle_new_file(file_name);
-
+        if !self.first_half_of_compilation(file_name) {
+            return;
+        };
+        
         while let Some(file) = self.loader.next_unprocessed_file() {
-            let Ok((table_type, dependencies)) = self.analyze_file_semanticly(file.clone()) else {
+            if !self.first_half_of_compilation(file) {
                 return;
-            };
-            for dependency in dependencies.iter() {
-                self.loader.handle_new_file(dependency.file.clone())
             }
-            self.finish_compilation(file.to_string(), table_type);
         }
+
+        
+        //self.finish_compilation(file.to_string(), header.table_type);
     }
 
-    fn analyze_file_semanticly(&self, file_name: String) -> Result<(Vec<TableTypes>, Vec<Dependencies>), ()> {
+    fn first_half_of_compilation(&mut self, file_name: String) -> bool {
+        let Ok(header) = self.analyze_file_semanticly(file_name.clone()) else {
+            return false;
+        };
+            
+        self.loader.handle_new_file(header.clone());
+
+        if Self::print_errors_and_warnings() {
+            return false;
+        }
+
+        true
+    }
+
+    fn analyze_file_semanticly(&self, file_name: String) -> Result<(FileHeader), ()> {
         let flags = self.flags.clone();
 
         let parsed_text = parse_text(&file_name.clone(), flags.parser_debug);
@@ -66,22 +75,22 @@ impl Head {
         let (parsed_text, file_str) = parsed_text.expect("parsing failed");
 
         error_handler::with_handler(|h| h.set_source(file_str));
-        let (type_table, depen, pending_checks) = analyze_semantically(parsed_text, file_name.clone(), flags.semantic_analyzer_debug);
+        let (type_table, modules_needed, pending_checks, public_modules) =
+            analyze_semantically(parsed_text, file_name.clone(), flags.semantic_analyzer_debug);
 
-        if Self::print_errors_and_warnings() {
-            return Err(());
-        }
+        //if Self::print_errors_and_warnings() {
+        //    return Err(());
+        //}
 
-        let mut dependencies = vec![];
-        for dependency in depen.iter() {
-            dependencies.push(Dependencies {
-                file: file_name.clone(),
-                modules: dependency.modules.clone(),
-                pending_checks: pending_checks.clone(),
-            });
-        }
+        let header = FileHeader {
+            file_name: file_name.clone(),
+            modules_needed,
+            public_modules: public_modules.clone(),
+            pending_checks,
+            table_type: type_table.clone(),
+        };
 
-        Ok((type_table, dependencies))
+        Ok(header)
     }
 
     fn finish_compilation(&self, file_name: String, table_type: Vec<TableTypes>) {

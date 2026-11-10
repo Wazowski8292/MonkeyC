@@ -50,6 +50,10 @@ impl SemanticAnalyzer {
                 func.modifire = self.modifires.clone();
                 self.modifires.clear();
             }
+            TableTypes::StructLiteral(ref mut sl) => {
+                sl.modifire = self.modifires.clone();
+                self.modifires.clear();
+            }
             _ => {}
         }
 

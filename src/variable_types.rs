@@ -361,6 +361,7 @@ pub struct StructLiteral {
     pub name: String,
     pub arguments: Vec<TableTypes>,
     pub functions: Vec<TableTypes>,
+    pub modifire: Vec<Modifire>,
 }
 
 impl Types for StructLiteral {
@@ -369,6 +370,7 @@ impl Types for StructLiteral {
             name: "".to_string(),
             arguments: vec![],
             functions: vec![],
+            modifire: vec![],
         }
     }
 

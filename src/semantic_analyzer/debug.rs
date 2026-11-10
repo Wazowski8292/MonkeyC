@@ -83,7 +83,7 @@ fn format_item(item: &TableTypes, level: usize) -> String {
         }
 
         TableTypes::StructLiteral(s) => {
-            let header = format!("{p}struct {} {{", s.name);
+            let header = format!("{p}{:?} struct {} {{", s.modifire, s.name);
             let mut body = format_table(&s.arguments, level + 1);
             if !s.functions.is_empty() {
                 body.push_str(&format!("\n{p}    -- methods --\n"));

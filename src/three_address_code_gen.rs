@@ -1,6 +1,6 @@
 use crate::semantic_analyzer::{Scope, TableTypes, TokenType};
 use crate::variable_types::{
-    Conditional, Function, FunctionCall, InlineAssembly, Loop, Modifire, PointerType, Reasingment, Return, StructLiteral, Value, Variable,
+    Conditional, Function, FunctionCall, InlineAssembly, Loop, PointerType, Reasingment, Return, StructLiteral, Value, Variable,
 };
 use std::collections::HashMap;
 use std::vec::Vec;

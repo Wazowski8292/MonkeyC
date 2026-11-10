@@ -50,6 +50,7 @@ struct SemanticAnalyzer {
     pending_checks: Vec<String>,
     current_import_struct: Option<String>,
     modifires: Vec<Modifire>,
+    public_modules: Vec<TableTypes>,
 }
 
 impl SemanticAnalyzer {
@@ -70,6 +71,7 @@ impl SemanticAnalyzer {
             pending_checks: vec![],
             current_import_struct: None,
             modifires: vec![],
+            public_modules: vec![],
         }
     }
 
@@ -130,6 +132,9 @@ impl SemanticAnalyzer {
                 }
             }
         }
+
+        self.sync_dependencies();
+        self.sync_public_modules();
     }
 
     fn tokenize_line(&mut self, line: &Vec<Word>) {
@@ -148,7 +153,6 @@ impl SemanticAnalyzer {
         }
 
         self.current_import_struct = None;
-        self.sync_dependencies();
     }
 
     fn check_and_record_pending(&mut self, words: &mut Vec<Word>) {
@@ -407,13 +411,49 @@ impl SemanticAnalyzer {
         }
     }
 
-    pub(super) fn sync_dependencies(&mut self) {
-        self.dependencies.clear();
+    fn sync_dependencies(&mut self) {
         for entry in &self.table {
             if let TableTypes::Dependencies(inc) = entry {
                 if !inc.file.is_empty() {
                     self.dependencies.push(inc.clone());
                 }
+            }
+        }
+    }
+
+    fn sync_public_modules(&mut self) {
+        self.public_modules.clear();
+        for entry in &self.table {
+            match entry {
+                TableTypes::Function(func) => {
+                    if func.modifire.contains(&Modifire::Public) && func.name.is_some() {
+                        let mut public_fn = func.clone();
+                        public_fn.table.clear();
+                        self.public_modules.push(TableTypes::Function(public_fn.clone()));
+                    }
+                }
+                TableTypes::StructLiteral(s) => {
+                    if s.modifire.contains(&Modifire::Public) && !s.name.is_empty() {
+                        let mut public_struct = s.clone();
+                        public_struct.arguments.retain(|arg| match arg {
+                            TableTypes::Variable(v) => v.modifire.contains(&Modifire::Public),
+                            _ => false,
+                        });
+                        public_struct.functions.retain(|func| match func {
+                            TableTypes::Function(f) => f.modifire.contains(&Modifire::Public),
+                            _ => false,
+                        });
+
+                        for function in &mut public_struct.functions {
+                            if let TableTypes::Function(func) = function {
+                                func.table.clear();
+                            }
+                        }
+
+                        self.public_modules.push(TableTypes::StructLiteral(public_struct));
+                    }
+                }
+                _ => {}
             }
         }
     }
@@ -439,7 +479,9 @@ impl SemanticAnalyzer {
     }
 }
 
-pub fn analyze_semantically(stack: Vec<Block>, file_name: String, debug: bool) -> (Vec<TableTypes>, Vec<Include>, Vec<String>) {
+pub fn analyze_semantically(
+    stack: Vec<Block>, file_name: String, debug: bool,
+) -> (Vec<TableTypes>, Vec<Include>, Vec<String>, Vec<TableTypes>) {
     let mut semantic_analyzer: SemanticAnalyzer = SemanticAnalyzer::new(file_name);
     semantic_analyzer.analyze(stack);
 
@@ -447,8 +489,8 @@ pub fn analyze_semantically(stack: Vec<Block>, file_name: String, debug: bool) -
 
     if debug {
         debug::print(&semantic_analyzer.table.clone());
-        println!("{:#?}", semantic_analyzer.table);
+        //println!("{:#?}", semantic_analyzer.table);
     }
 
-    (semantic_analyzer.table, semantic_analyzer.dependencies, semantic_analyzer.pending_checks)
+    (semantic_analyzer.table, semantic_analyzer.dependencies, semantic_analyzer.pending_checks, semantic_analyzer.public_modules)
 }
