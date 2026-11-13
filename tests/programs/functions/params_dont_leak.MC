@@ -9,5 +9,5 @@ fn main() {
     print_int(r);
     print_int(a);
 }
-## expect: 101
-## expect: 1
+# expect: 101
+# expect: 1

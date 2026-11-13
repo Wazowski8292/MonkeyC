@@ -5,4 +5,4 @@ fn one(int a) -> int {
 fn main() {
     print_int(one(1 , 2 , 3));
 }
-## expect-error: Too many arguments for function call
+# expect-error: Too many arguments for function call

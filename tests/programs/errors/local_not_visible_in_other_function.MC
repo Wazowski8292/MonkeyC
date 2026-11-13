@@ -6,4 +6,4 @@ fn main() {
     int secret = 5;
     print_int(helper());
 }
-## expect-error: Undefined symbol: secret
+# expect-error: Undefined symbol: secret

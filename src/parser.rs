@@ -101,6 +101,17 @@ impl Parser {
             return;
         }
 
+        if self.skip_pending {
+            self.skip_pending = false;
+            if letter == '(' {
+                self.start_skip_block();
+                return;
+            } else {
+                self.skip_block = SkipType::Line;
+                return;
+            }
+        }
+
         let skip_pending = self.skip_pending;
 
         match letter {
@@ -134,17 +145,15 @@ impl Parser {
         self.finish_line();
     }
 
-    fn handle_skip(&mut self, was_pending: bool) {
-        if was_pending {
-            self.skip_block = SkipType::Line;
-        } else {
-            self.skip_pending = true;
-        }
+    fn handle_skip(&mut self, _was_pending: bool) {
+        self.finish_word();
+        self.skip_pending = true;
     }
 
     fn start_skip_block(&mut self) {
         self.finish_word();
         self.skip_block = SkipType::Block;
+        self.skip_pending = false;
     }
 
     fn parse_skipped_char(&mut self, letter: char) {

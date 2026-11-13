@@ -19,5 +19,5 @@ fn main() {
     int r2 = compute();
     print_int(r2);
 }
-## expect: 11
-## expect: 11
+# expect: 11
+# expect: 11

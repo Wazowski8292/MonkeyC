@@ -5,4 +5,4 @@ fn half() -> float {
 fn main() {
     int x = half();
 }
-## expect-error: Type mismatch: variable is 'int' but function 'half' returns 'float'
+# expect-error: Type mismatch: variable is 'int' but function 'half' returns 'float'

@@ -15,6 +15,6 @@ fn main() {
     int c = fact(6);
     print_int(c);
 }
-## expect: 1
-## expect: 120
-## expect: 720
+# expect: 1
+# expect: 120
+# expect: 720

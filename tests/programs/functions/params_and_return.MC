@@ -8,5 +8,5 @@ fn main() {
     int r2 = add(10 ; 20);
     print_int(r2);
 }
-## expect: 5
-## expect: 30
+# expect: 5
+# expect: 30

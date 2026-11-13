@@ -17,6 +17,6 @@ fn main() {
     int r10 = fib(10);
     print_int(r10);
 }
-## expect: 0
-## expect: 1
-## expect: 55
+# expect: 0
+# expect: 1
+# expect: 55

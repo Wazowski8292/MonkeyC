@@ -4,12 +4,12 @@ fn main() {
     int sum = a + b;
     int diff = a - b;
     int prod = a * b;
-    ## int quot = a / b;
+    # int quot = a / b;
     print_int(sum);
     print_int(diff);
     print_int(prod);
-    ## print_int(quot);
+    # print_int(quot);
 }
-## expect: 10
-## expect: 4
-## expect: 21
+# expect: 10
+# expect: 4
+# expect: 21

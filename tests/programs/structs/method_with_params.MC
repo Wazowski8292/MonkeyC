@@ -21,5 +21,5 @@ fn main() {
     int r2 = m::scaled(two ; three);
     print_int(r2);
 }
-## expect: 15
-## expect: 23
+# expect: 15
+# expect: 23

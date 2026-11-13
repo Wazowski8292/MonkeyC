@@ -9,4 +9,4 @@ fn twice() -> int {
 fn main() {
     print_int(twice());
 }
-## expect-error: already
+# expect-error: already

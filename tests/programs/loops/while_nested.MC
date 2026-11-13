@@ -10,7 +10,7 @@ fn main() {
         i++;
     }
 }
-## expect: 0
-## expect: 1
-## expect: 10
-## expect: 11
+# expect: 0
+# expect: 1
+# expect: 10
+# expect: 11

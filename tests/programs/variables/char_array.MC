@@ -4,4 +4,4 @@ fn main() {
     print_char(text[2]);
     print_char(text[1]);
 }
-## expect: acb
+# expect: acb

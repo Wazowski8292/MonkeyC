@@ -3,6 +3,6 @@ fn main() {
         print_int(x);
     }
 }
-## expect: 0
-## expect: 1
-## expect: 2
+# expect: 0
+# expect: 1
+# expect: 2

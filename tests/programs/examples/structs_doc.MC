@@ -11,4 +11,4 @@ fn main() {
     Test a;
     print_int(a::add());
 }
-## expect: 11
+# expect: 11

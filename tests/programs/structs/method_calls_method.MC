@@ -17,4 +17,4 @@ fn main() {
     int r = c::sum_again();
     print_int(r);
 }
-## expect: 7
+# expect: 7

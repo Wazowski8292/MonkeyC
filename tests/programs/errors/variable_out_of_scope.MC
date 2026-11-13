@@ -4,4 +4,4 @@ fn main() {
     }
     print_int(inner);
 }
-## expect-error: Undefined symbol: inner
+# expect-error: Undefined symbol: inner

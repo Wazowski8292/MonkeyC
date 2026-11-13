@@ -6,4 +6,4 @@ fn main() {
     }
     print_int(sum);
 }
-## expect: 60
+# expect: 60

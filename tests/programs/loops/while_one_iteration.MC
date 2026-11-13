@@ -5,4 +5,4 @@ fn main() {
         i++;
     }
 }
-## expect: 4
+# expect: 4

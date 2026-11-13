@@ -18,4 +18,4 @@ fn main() {
     int r = c::get();
     print_int(r);
 }
-## expect: 3
+# expect: 3

@@ -4,5 +4,5 @@ fn main() {
     print_int(a);
     print_int(b);
 }
-## expect: 14
-## expect: 10
+# expect: 14
+# expect: 10

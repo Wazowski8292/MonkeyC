@@ -9,6 +9,6 @@ fn main() {
     x -= 2;
     print_int(x);
 }
-## expect: 6
-## expect: 8
-## expect: 6
+# expect: 6
+# expect: 8
+# expect: 6

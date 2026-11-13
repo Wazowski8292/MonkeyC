@@ -6,6 +6,6 @@ fn main() {
     nums[1] = 5;
     print_int(nums[1]);
 }
-## expect: 10
-## expect: 50
-## expect: 5
+# expect: 10
+# expect: 50
+# expect: 5

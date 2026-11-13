@@ -7,4 +7,4 @@ fn main() {
         count++;
     }
 }
-## expect: hello
+# expect: hello

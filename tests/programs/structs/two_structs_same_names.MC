@@ -25,5 +25,5 @@ fn main() {
     int rb = b::add();
     print_int(rb);
 }
-## expect: 11
-## expect: 15
+# expect: 11
+# expect: 15

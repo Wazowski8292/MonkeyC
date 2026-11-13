@@ -7,4 +7,4 @@ fn main() {
     }
     print_int(sum);
 }
-## expect: 10
+# expect: 10

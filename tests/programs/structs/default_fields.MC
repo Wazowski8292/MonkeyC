@@ -8,5 +8,5 @@ fn main() {
     print_int(p::x);
     print_int(p::y);
 }
-## expect: 5
-## expect: 6
+# expect: 5
+# expect: 6

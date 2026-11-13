@@ -4,4 +4,4 @@ fn main() {
     int q = a / b;
     print_int(q);
 }
-## ignore:
+# ignore:

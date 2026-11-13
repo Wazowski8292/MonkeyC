@@ -6,4 +6,4 @@ fn main() {
     int r = add(1);
     print_int(r);
 }
-## expect-error: Expected: 2
+# expect-error: Expected: 2

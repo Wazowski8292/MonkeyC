@@ -402,6 +402,8 @@ impl Types for InlineAssembly {
 pub struct Include {
     pub file: String,
     pub modules: Vec<String>,
+    //pub line: usize,
+    //pub char_pos: usize,
 }
 
 impl Types for Include {
@@ -409,6 +411,8 @@ impl Types for Include {
         Self {
             file: String::new(),
             modules: vec![],
+            //line: 0,
+            //char_pos: 0,
         }
     }
 

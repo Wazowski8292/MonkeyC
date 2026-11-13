@@ -8,7 +8,7 @@ fn main() {
         print_int(square);
     }
 }
-## expect: 1
-## expect: 4
-## expect: 9
-## expect: 16
+# expect: 1
+# expect: 4
+# expect: 9
+# expect: 16

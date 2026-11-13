@@ -5,4 +5,4 @@ fn main() {
     }
     print_int(total);
 }
-## expect: 15
+# expect: 15

@@ -14,5 +14,5 @@ fn main() {
     int r = a::add();
     print_int(r);
 }
-## expect: 20
-## expect: 26
+# expect: 20
+# expect: 26

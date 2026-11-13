@@ -4,4 +4,4 @@ fn main() {
     }
     print_int(7);
 }
-## expect: 7
+# expect: 7

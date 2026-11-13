@@ -10,7 +10,6 @@ Test.asm
 Code
 code
 Test.asm
-
 .vscode/
 .dap-path
 .dap-args

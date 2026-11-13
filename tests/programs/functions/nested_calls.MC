@@ -18,5 +18,5 @@ fn main() {
     int z = add(x ; y);
     print_int(z);
 }
-## expect: 14
-## expect: 6
+# expect: 14
+# expect: 6

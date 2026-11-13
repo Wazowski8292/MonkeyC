@@ -6,4 +6,4 @@ fn main() {
     }
     print_int(0);
 }
-## expect: 0
+# expect: 0

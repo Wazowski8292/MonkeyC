@@ -11,4 +11,4 @@ fn main() {
     int r = outer();
     print_int(r);
 }
-## expect: 8
+# expect: 8

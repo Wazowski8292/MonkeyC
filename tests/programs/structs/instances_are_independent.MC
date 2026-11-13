@@ -21,5 +21,5 @@ fn main() {
     int rb = b::get();
     print_int(rb);
 }
-## expect: 2
-## expect: 1
+# expect: 2
+# expect: 1

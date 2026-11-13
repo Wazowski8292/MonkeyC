@@ -6,5 +6,5 @@ fn main() {
     hello();
     hello();
 }
-## expect: 1
-## expect: 1
+# expect: 1
+# expect: 1
