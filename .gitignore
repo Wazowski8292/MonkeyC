@@ -1,11 +1,16 @@
 target/
 Code.MC
+Test.MC
 Code.o
 code.o
+Test.o
 Code.asm
 code.asm
+Test.asm
 Code
 code
+Test.asm
+
 .vscode/
 .dap-path
 .dap-args

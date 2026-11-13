@@ -412,6 +412,7 @@ impl SemanticAnalyzer {
     }
 
     fn sync_dependencies(&mut self) {
+        self.dependencies.clear();
         for entry in &self.table {
             if let TableTypes::Dependencies(inc) = entry {
                 if !inc.file.is_empty() {
@@ -489,7 +490,7 @@ pub fn analyze_semantically(
 
     if debug {
         debug::print(&semantic_analyzer.table.clone());
-        //println!("{:#?}", semantic_analyzer.table);
+        println!("{:#?}", semantic_analyzer.pending_checks);
     }
 
     (semantic_analyzer.table, semantic_analyzer.dependencies, semantic_analyzer.pending_checks, semantic_analyzer.public_modules)

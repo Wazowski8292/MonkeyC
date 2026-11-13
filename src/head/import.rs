@@ -57,18 +57,17 @@ impl FileLoader {
 
     pub fn handle_new_file(&mut self, header: FileHeader) {
         for dependency in header.modules_needed {
-            if !self.load_dependency(dependency.clone()) {
-                println!("a");
+            if !self.load_dependency(dependency.clone(), header.file_name.clone()) {
                 continue;
             }
         }
     }
 
-    pub fn load_dependency(&mut self, dependency: Include) -> bool {
+    pub fn load_dependency(&mut self, dependency: Include, header_name: String) -> bool {
         let file_name = dependency.file.clone();
         if !Self::check_file_type(file_name.clone()) {
             report!(
-                file_name.clone(),
+                header_name.clone(),
                 crate::error_handler::error_codes::ErrorCodes::FileNotMonkeyC,
                 0,
                 0,
@@ -81,7 +80,7 @@ impl FileLoader {
 
         if !Self::check_file_exists(file_name.clone()) {
             report!(
-                file_name.clone(),
+                header_name,
                 crate::error_handler::error_codes::ErrorCodes::FileNotFound,
                 0,
                 0,

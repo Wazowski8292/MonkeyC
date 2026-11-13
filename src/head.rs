@@ -60,7 +60,7 @@ impl Head {
         true
     }
 
-    fn analyze_file_semanticly(&self, file_name: String) -> Result<(FileHeader), ()> {
+    fn analyze_file_semanticly(&self, file_name: String) -> Result<FileHeader, ()> {
         let flags = self.flags.clone();
 
         let parsed_text = parse_text(&file_name.clone(), flags.parser_debug);

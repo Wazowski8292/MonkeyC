@@ -18,7 +18,6 @@ impl SemanticAnalyzer {
         let word = entry_info.word.clone();
         let index = entry_info.index.clone();
 
-        println!("word {:?}", word);
         self.update_set_variable(token.clone());
         self.check_parameter_error(entry_info.clone(), argument_variable_info.clone());
         self.check_pointer_type(entry_info.clone(), argument_variable_info.clone());
