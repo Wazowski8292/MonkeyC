@@ -490,8 +490,14 @@ pub fn analyze_semantically(
 
     if debug {
         debug::print(&semantic_analyzer.table.clone());
-        println!("{:#?}", semantic_analyzer.pending_checks);
+        //println!("{:#?}", semantic_analyzer.pending_checks);
     }
 
     (semantic_analyzer.table, semantic_analyzer.dependencies, semantic_analyzer.pending_checks, semantic_analyzer.public_modules)
+}
+
+pub fn finish_pending_checks(file_name: String, semantic_table: Vec<TableTypes>, dependencies: Vec<TableTypes>, pending_checks: Vec<String>) {
+    let mut semantic_analyzer = SemanticAnalyzer::new(file_name); 
+    semantic_analyzer.table = semantic_table;
+    semantic_analyzer.pending_checks = pending_checks;
 }

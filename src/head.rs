@@ -4,7 +4,7 @@ use crate::code_generator::generate_assembly;
 use crate::error_handler;
 use crate::head::import::{FileLoader, FileHeader};
 use crate::parser::parse_text;
-use crate::semantic_analyzer::{analyze_semantically, table::TableTypes};
+use crate::semantic_analyzer::{analyze_semantically, finish_pending_checks};
 use crate::three_address_code_gen::generate_three_address_code;
 use crate::write_asm::write_asm;
 
@@ -32,7 +32,7 @@ impl Head {
     }
 
     pub fn compile(&mut self, file_name: String) {
-        if !self.first_half_of_compilation(file_name) {
+        if !self.first_half_of_compilation(file_name.clone()) {
             return;
         };
         
@@ -41,9 +41,14 @@ impl Head {
                 return;
             }
         }
+        
+        self.finish_compilation(file_name.clone());
+        self.loader.reset_index();
+        while let Some(file) = self.loader.next_unprocessed_file() {
+           self.finish_compilation(file); 
+        }
 
         
-        //self.finish_compilation(file.to_string(), header.table_type);
     }
 
     fn first_half_of_compilation(&mut self, file_name: String) -> bool {
@@ -78,10 +83,6 @@ impl Head {
         let (type_table, modules_needed, pending_checks, public_modules) =
             analyze_semantically(parsed_text, file_name.clone(), flags.semantic_analyzer_debug);
 
-        //if Self::print_errors_and_warnings() {
-        //    return Err(());
-        //}
-
         let header = FileHeader {
             file_name: file_name.clone(),
             modules_needed,
@@ -93,10 +94,13 @@ impl Head {
         Ok(header)
     }
 
-    fn finish_compilation(&self, file_name: String, table_type: Vec<TableTypes>) {
+    fn finish_compilation(&self, file_name: String) {
+        let header = self.loader.get_dependency(file_name.clone()).unwrap();
+        let dependencies: Vec<_> = header.modules_needed.iter().flat_map(|x| self.loader.get_dependency(x.file.clone()).unwrap().public_modules).collect();
         let flags = self.flags.clone();
 
-        let tac = generate_three_address_code(table_type, flags.tac_debug);
+        finish_pending_checks(file_name.clone() ,header.table_type.clone(), dependencies, header.pending_checks);
+        let tac = generate_three_address_code(header.table_type, flags.tac_debug);
         let asm = generate_assembly(tac);
         let asm_path = file_name.replace(".MC", ".asm");
         write_asm(&asm_path, &asm);

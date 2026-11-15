@@ -41,8 +41,8 @@ const EXTENSION: &str = "MC"; // matched case-insensitively here, but the compil
 const DEFAULT_TIMEOUT_SECS: u64 = 5; // applies to the compiler, and separately to the compiled program
 
 /// How a comment starts in Monkey C. The test markers are written as comments,
-/// e.g. `## expect: 11`.
-const COMMENT: &str = "##";
+/// e.g. `# expect: 11` or `## expect: 11`.
+const COMMENT: &str = "#";
 
 /// false: compare stdout ignoring ALL whitespace, so it does not matter whether
 ///        print_int & co. end their output with a newline (safe default).
@@ -130,10 +130,10 @@ struct Expectations {
     timeout: Duration,
 }
 
-/// If `line` is a marker comment like `## expect: 11`, return the text after
-/// the colon (one leading space removed). `## expect:` alone gives "".
+/// If `line` is a marker comment like `# expect: 11` or `## expect: 11`, return the text after
+/// the colon (one leading space removed). `# expect:` alone gives "".
 fn marker<'a>(line: &'a str, name: &str) -> Option<&'a str> {
-    let rest = line.trim().strip_prefix(COMMENT)?.trim_start();
+    let rest = line.trim().strip_prefix(COMMENT)?.trim_start_matches('#').trim_start();
     let rest = rest.strip_prefix(name)?.strip_prefix(':')?;
     Some(rest.strip_prefix(' ').unwrap_or(rest))
 }

@@ -3,7 +3,7 @@ use crate::semantic_analyzer::TableTypes;
 use crate::variable_types::Include;
 use std::fs;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct FileHeader {
     pub file_name: String,
     pub public_modules: Vec<TableTypes>,
@@ -33,7 +33,7 @@ impl FileLoader {
     pub fn new() -> Self {
         Self {
             token_cache: vec![],
-            index: 0,
+            index: 1,
         }
     }
 
@@ -56,6 +56,16 @@ impl FileLoader {
     }
 
     pub fn handle_new_file(&mut self, header: FileHeader) {
+        if let Some(existing) = self
+           .token_cache
+            .iter_mut()
+            .find(|h| h.file_name == header.file_name)
+        {
+            *existing = header.clone();
+        } else {
+            self.token_cache.push(header.clone());
+        }
+
         for dependency in header.modules_needed {
             if !self.load_dependency(dependency.clone(), header.file_name.clone()) {
                 continue;
@@ -103,9 +113,21 @@ impl FileLoader {
         if self.index < self.token_cache.len() {
             let file_name = self.token_cache[self.index].file_name.clone();
             self.index += 1;
-            Some(file_name)
+            Some(file_name.clone())
         } else {
             None
         }
+    }
+
+    pub fn reset_index(&mut self) {
+        self.index = 1;
+    }
+
+    pub fn get_dependency(&self, file_name: String) -> Option<FileHeader> {
+        self.token_cache.iter().find(|dependency| dependency.file_name == file_name.clone()).cloned()
+    }
+    
+    pub fn _print_table(&self) {
+        println!("{:#?}", self.token_cache.clone());
     }
 }
