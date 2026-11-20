@@ -42,13 +42,15 @@ impl Head {
             }
         }
         
-        self.finish_compilation(file_name.clone());
+        if !self.finish_compilation(file_name.clone()) {
+            return;
+        }
         self.loader.reset_index();
         while let Some(file) = self.loader.next_unprocessed_file() {
-           self.finish_compilation(file); 
+           if !self.finish_compilation(file) {
+               return;
+           }
         }
-
-        
     }
 
     fn first_half_of_compilation(&mut self, file_name: String) -> bool {
@@ -58,9 +60,10 @@ impl Head {
             
         self.loader.handle_new_file(header.clone());
 
-        if Self::print_errors_and_warnings() {
+        /*if Self::print_errors_and_warnings() {
             return false;
-        }
+        }*/
+
 
         true
     }
@@ -79,7 +82,7 @@ impl Head {
 
         let (parsed_text, file_str) = parsed_text.expect("parsing failed");
 
-        error_handler::with_handler(|h| h.set_source(file_str));
+        error_handler::with_handler(|h| h.set_source(file_name.clone(), file_str));
         let (type_table, modules_needed, pending_checks, public_modules) =
             analyze_semantically(parsed_text, file_name.clone(), flags.semantic_analyzer_debug);
 
@@ -94,16 +97,33 @@ impl Head {
         Ok(header)
     }
 
-    fn finish_compilation(&self, file_name: String) {
+    fn finish_compilation(&self, file_name: String) -> bool {
         let header = self.loader.get_dependency(file_name.clone()).unwrap();
-        let dependencies: Vec<_> = header.modules_needed.iter().flat_map(|x| self.loader.get_dependency(x.file.clone()).unwrap().public_modules).collect();
+        let dependencies: Vec<(String, Vec<_>)> = header
+            .modules_needed
+            .iter()
+            .map(|x| {
+            let public_modules = self
+                .loader
+                .get_dependency(x.file.clone())
+                .unwrap()
+                .public_modules;
+            (x.file.clone(), public_modules)
+        }).collect();
+
         let flags = self.flags.clone();
 
         finish_pending_checks(file_name.clone() ,header.table_type.clone(), dependencies, header.pending_checks);
+
+        if Self::print_errors_and_warnings() {
+            return false;
+        }
+
         let tac = generate_three_address_code(header.table_type, flags.tac_debug);
         let asm = generate_assembly(tac);
         let asm_path = file_name.replace(".MC", ".asm");
         write_asm(&asm_path, &asm);
+        true
     }
 
     fn print_errors_and_warnings() -> bool {

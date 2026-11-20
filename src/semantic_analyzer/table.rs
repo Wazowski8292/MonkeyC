@@ -75,4 +75,15 @@ impl TableTypes {
             _ => {}
         }
     }
+
+    pub fn get_name(&self) -> Option<String> {
+        match self {
+            TableTypes::Variable(var) => var.name.clone(),
+            TableTypes::Function(fun) => fun.name.clone(),
+            TableTypes::Reasingment(reasing) => Some(reasing.name.clone()),
+            TableTypes::FunctionCall(fc) => Some(fc.name.clone()),
+            TableTypes::StructLiteral(struct_literal) => Some(struct_literal.name.clone()),
+            _ => None,
+        }
+    }
 }

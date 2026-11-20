@@ -2,6 +2,7 @@ pub mod error_codes;
 pub mod warning_codes;
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 
 #[derive(Clone)]
 pub struct Diagnostic {
@@ -9,11 +10,11 @@ pub struct Diagnostic {
     pub line: usize,
     pub col: usize,
     pub msg: String,
-    pub code: String, // e.g. "E001"
+    pub code: String,
 }
 
 pub struct ErrorHandler {
-    source: Vec<String>,
+    source: HashMap<String, Vec<String>>,
     warnings: Vec<Diagnostic>,
     errors: Vec<Diagnostic>,
 }
@@ -21,14 +22,14 @@ pub struct ErrorHandler {
 impl ErrorHandler {
     pub fn new() -> Self {
         Self {
-            source: vec![],
+            source: HashMap::new(),
             warnings: Vec::new(),
             errors: Vec::new(),
         }
     }
 
-    pub fn set_source(&mut self, src: Vec<String>) {
-        self.source = src;
+    pub fn set_source(&mut self, file_name: String, src: Vec<String>) {
+        self.source.insert(file_name, src);
     }
 
     pub fn add_warning(&mut self, warning_code: warning_codes::WarningCodes, line: usize, col: usize, msg: String, file_name: String) {
@@ -77,8 +78,15 @@ impl ErrorHandler {
             return;
         }
 
+        let Some(source) = self.source.get(&diagnostic.file_name) else {
+            return;
+        };
+        if source.is_empty() {
+            return;
+        }
+
         let error_line = (diagnostic.line - 1) as usize;
-        let total_lines = self.source.len();
+        let total_lines = source.len();
 
         let mut start = if error_line > 2 { error_line - 2 } else { 1 };
         let mut end = start + 4;
@@ -91,7 +99,7 @@ impl ErrorHandler {
         let width = (end + 1).to_string().len();
 
         for i in start..=end {
-            let line_content = &self.source[i - 1];
+            let line_content = &source[i - 1];
             println!("{:>width$} | {}", i + 1, line_content, width = width);
 
             if i == error_line {
@@ -130,13 +138,15 @@ impl ErrorHandler {
         (start + 1, end - start)
     }
 
-    pub fn print_all_warnings(&self) {
-        self.print_diagnostics(self.warnings.clone(), "Warning".to_string());
+    pub fn print_all_warnings(&mut self) {
+        let warnings = std::mem::take(&mut self.warnings);
+        self.print_diagnostics(warnings, "Warning".to_string());
     }
 
-    pub fn print_all_errors(&self) {
-        let len = self.errors.len();
-        self.print_diagnostics(self.errors.clone(), "Error".to_string());
+    pub fn print_all_errors(&mut self) {
+        let errors = std::mem::take(&mut self.errors);
+        let len = errors.len();
+        self.print_diagnostics(errors, "Error".to_string());
 
         println!(
             "There {} {} compiler error{}. Please fix the compiler error{} before compiling.",

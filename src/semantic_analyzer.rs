@@ -7,6 +7,7 @@ mod members;
 mod new_entry;
 mod normalize;
 mod resolve;
+mod resolve_dependencies;
 pub mod table;
 pub mod tokens;
 
@@ -16,7 +17,7 @@ pub use tokens::*;
 use crate::enbeded_funcs::FUNCTIONS;
 use crate::parser::{Block, Word};
 use crate::semantic_analyzer::add_arguments::ArgumentVariableInfo;
-use crate::variable_types::{FunctionCall, Include, Modifire, PointerType};
+use crate::variable_types::{FunctionCall, Include, Modifire, PendingCheck, PointerType};
 use crate::warn;
 use std::vec::Vec;
 
@@ -47,7 +48,7 @@ struct SemanticAnalyzer {
     current_struct_init: Option<String>,
     last_finished: bool,
     dependencies: Vec<Include>,
-    pending_checks: Vec<String>,
+    pending_checks: Vec<PendingCheck>,
     current_import_struct: Option<String>,
     modifires: Vec<Modifire>,
     public_modules: Vec<TableTypes>,
@@ -161,11 +162,18 @@ impl SemanticAnalyzer {
         }
 
         let mut i = 0;
-        let mut found_qualified = false;
         while i + 2 < words.len() {
             if words[i + 1].word == "::" && self.is_qualified_module_symbol(&words[i].word, &words[i + 2].word) {
-                found_qualified = true;
+                let module = words[i].word.clone();
                 let symbol = words[i + 2].word.clone();
+                let line = words[i + 2].line.unwrap_or(0);
+                let char_num = words[i + 2].char_num.unwrap_or(0);
+
+                let check = PendingCheck::new(module, symbol.clone(), line, char_num);
+                if !self.pending_checks.contains(&check) {
+                    self.pending_checks.push(check);
+                }
+
                 if i + 3 < words.len() || symbol.chars().next().map_or(false, |c| c.is_uppercase()) {
                     self.current_import_struct = Some(symbol.clone());
                 }
@@ -173,26 +181,6 @@ impl SemanticAnalyzer {
                 words.drain(i + 1..i + 3);
             } else {
                 i += 1;
-            }
-        }
-
-        if found_qualified {
-            let line_words: Vec<String> = words
-                .iter()
-                .map(|w| {
-                    if let Some(mod_name) = self.find_module_for_symbol(&w.word) {
-                        format!("{}::{}", mod_name, w.word)
-                    } else {
-                        w.word.clone()
-                    }
-                })
-                .collect();
-            let mut line_str = line_words.join(" ");
-            if !line_str.ends_with(';') {
-                line_str.push(';');
-            }
-            if !self.pending_checks.contains(&line_str) {
-                self.pending_checks.push(line_str);
             }
         }
     }
@@ -482,7 +470,7 @@ impl SemanticAnalyzer {
 
 pub fn analyze_semantically(
     stack: Vec<Block>, file_name: String, debug: bool,
-) -> (Vec<TableTypes>, Vec<Include>, Vec<String>, Vec<TableTypes>) {
+) -> (Vec<TableTypes>, Vec<Include>, Vec<PendingCheck>, Vec<TableTypes>) {
     let mut semantic_analyzer: SemanticAnalyzer = SemanticAnalyzer::new(file_name);
     semantic_analyzer.analyze(stack);
 
@@ -496,8 +484,10 @@ pub fn analyze_semantically(
     (semantic_analyzer.table, semantic_analyzer.dependencies, semantic_analyzer.pending_checks, semantic_analyzer.public_modules)
 }
 
-pub fn finish_pending_checks(file_name: String, semantic_table: Vec<TableTypes>, _dependencies: Vec<TableTypes>, pending_checks: Vec<String>) {
+pub fn finish_pending_checks(file_name: String, semantic_table: Vec<TableTypes>, dependencies: Vec<(String, Vec<TableTypes>)>, pending_checks: Vec<PendingCheck>) {
     let mut semantic_analyzer = SemanticAnalyzer::new(file_name); 
     semantic_analyzer.table = semantic_table;
     semantic_analyzer.pending_checks = pending_checks;
+
+    semantic_analyzer.resolve_pending_checks(dependencies);
 }

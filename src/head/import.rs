@@ -1,6 +1,6 @@
 use crate::report;
 use crate::semantic_analyzer::TableTypes;
-use crate::variable_types::Include;
+use crate::variable_types::{Include, PendingCheck};
 use std::fs;
 
 #[derive(Clone, Debug)]
@@ -8,7 +8,7 @@ pub struct FileHeader {
     pub file_name: String,
     pub public_modules: Vec<TableTypes>,
     pub modules_needed: Vec<Include>,
-    pub pending_checks: Vec<String>,
+    pub pending_checks: Vec<PendingCheck>,
     pub table_type: Vec<TableTypes>,
 }
 
