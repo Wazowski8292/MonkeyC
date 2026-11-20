@@ -1,6 +1,6 @@
 use super::{Tac, ThreeAddressCodeGenerator, Type};
-use crate::semantic_analyzer::{TableTypes, TokenType};
-use crate::variable_types::{PointerType, Value, Variable};
+use crate::semantic_analyzer::TokenType;
+use crate::variable_types::Variable;
 
 impl ThreeAddressCodeGenerator {
     pub fn add_variable(&mut self, variable: Variable) {
@@ -79,42 +79,6 @@ impl ThreeAddressCodeGenerator {
                     value_type: Some(field_type.clone()),
                     is_ptr: false,
                 });
-            }
-        }
-    }
-
-    pub(crate) fn table_type_to_value(e: &TableTypes) -> Value {
-        match e {
-            TableTypes::FunctionCall(call) => Value::FuncCall(call.clone()),
-            TableTypes::Reasingment(r) if r.ptr == Some(PointerType::Pointer) => Value::Deref(r.name.clone()),
-            TableTypes::Reasingment(r) if r.ptr == Some(PointerType::Reference) && r.name != "self" => Value::Ref(r.name.clone()),
-            TableTypes::Reasingment(r) => {
-                if let Some(idx) = &r.array_index {
-                    Value::Index(r.name.clone(), idx.clone())
-                } else {
-                    Value::Var(r.name.clone())
-                }
-            }
-            TableTypes::Variable(v) => {
-                if let Some(val) = v.value.as_ref().and_then(|v| v.first()) {
-                    val.clone()
-                } else if let Some(name) = &v.name {
-                    if let Some((arr_name, idx_str)) = crate::variable_types::parse_array_syntax(name) {
-                        Value::Index(arr_name, idx_str)
-                    } else {
-                        Value::Var(name.clone())
-                    }
-                } else {
-                    Value::Var(String::new())
-                }
-            }
-            _ => {
-                let op = Self::extract_operand(e);
-                if let Some((arr_name, idx_str)) = crate::variable_types::parse_array_syntax(&op) {
-                    Value::Index(arr_name, idx_str)
-                } else {
-                    Value::Var(op)
-                }
             }
         }
     }

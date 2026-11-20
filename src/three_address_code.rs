@@ -13,22 +13,22 @@ mod variable;
 pub use tac::*;
 
 use crate::semantic_analyzer::{Scope, TableTypes, TokenType};
-use crate::variable_types::{Conditional, Value};
+use crate::variable_types::{Conditional, PointerType, Value};
 use std::collections::HashMap;
 use std::vec::Vec;
 
 #[derive(Debug)]
-pub struct ThreeAddressCodeGenerator {
-    pub(crate) tac_table: Vec<Tac>,
-    pub(crate) temp_count: usize,
-    pub(crate) label_count: usize,
-    pub(crate) memory_alloc: usize,
-    pub(crate) current_return_type: Option<TokenType>,
-    pub(crate) struct_fields: HashMap<String, Vec<(String, TokenType, Option<Value>)>>,
+struct ThreeAddressCodeGenerator {
+    tac_table: Vec<Tac>,
+    temp_count: usize,
+    label_count: usize,
+    memory_alloc: usize,
+    current_return_type: Option<TokenType>,
+    struct_fields: HashMap<String, Vec<(String, TokenType, Option<Value>)>>,
 }
 
 impl ThreeAddressCodeGenerator {
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self {
             tac_table: vec![],
             temp_count: 0,
@@ -39,7 +39,7 @@ impl ThreeAddressCodeGenerator {
         }
     }
 
-    pub fn generate(&mut self, type_table: Vec<TableTypes>) {
+    fn generate(&mut self, type_table: Vec<TableTypes>) {
         for entry in type_table.iter() {
             if let TableTypes::StructLiteral(struct_literal) = entry {
                 self.add_structs(struct_literal.clone());
@@ -80,7 +80,7 @@ impl ThreeAddressCodeGenerator {
         }
     }
 
-    pub(crate) fn extract_operand(entry: &TableTypes) -> String {
+    fn extract_operand(entry: &TableTypes) -> String {
         if let TableTypes::Variable(var) = entry {
             if let Some(name) = &var.name {
                 return name.clone();
@@ -98,23 +98,23 @@ impl ThreeAddressCodeGenerator {
         String::new()
     }
 
-    pub(crate) fn symbol_ref(target: usize, scope: &Scope) -> String {
+    fn symbol_ref(target: usize, scope: &Scope) -> String {
         format!("{:?}#{}", scope, target)
     }
 
-    pub(crate) fn next_label(&mut self) -> String {
+    fn next_label(&mut self) -> String {
         let label = format!("L{}", self.label_count);
         self.label_count += 1;
         label
     }
 
-    pub(crate) fn next_temp(&mut self) -> String {
+    fn next_temp(&mut self) -> String {
         let temp = format!("_t{}", self.temp_count);
         self.temp_count += 1;
         temp
     }
 
-    pub(crate) fn precedence(op: &Operator) -> u8 {
+    fn precedence(op: &Operator) -> u8 {
         match op {
             Operator::LogicalOr => 1,
             Operator::LogicalAnd => 2,
@@ -128,7 +128,7 @@ impl ThreeAddressCodeGenerator {
         }
     }
 
-    pub(crate) fn evaluate_value(&mut self, value: &Value, value_type: Option<TokenType>) -> (String, bool) {
+    fn evaluate_value(&mut self, value: &Value, value_type: Option<TokenType>) -> (String, bool) {
         match value {
             Value::Var(val) => (val.clone(), false),
             Value::FuncCall(fncall) => {
@@ -183,7 +183,7 @@ impl ThreeAddressCodeGenerator {
         }
     }
 
-    pub(crate) fn parse_expr(
+    fn parse_expr(
         &mut self, tokens: &[Value], pos: &mut usize, min_prec: u8, tac_type: Type, target: String, is_top: bool,
         value_type: Option<TokenType>,
     ) -> String {
@@ -227,7 +227,7 @@ impl ThreeAddressCodeGenerator {
         left
     }
 
-    pub(crate) fn build_expression_chain(&mut self, tokens: Vec<Value>, target: String, tac_type: Type, value_type: Option<TokenType>) {
+    fn build_expression_chain(&mut self, tokens: Vec<Value>, target: String, tac_type: Type, value_type: Option<TokenType>) {
         if tokens.is_empty() {
             return;
         }
@@ -272,6 +272,42 @@ impl ThreeAddressCodeGenerator {
         let mut pos = 0;
         let _ = self.parse_expr(&tokens, &mut pos, 0, tac_type.clone(), target, true, value_type);
     }
+
+    fn table_type_to_value(e: &TableTypes) -> Value {
+        match e {
+            TableTypes::FunctionCall(call) => Value::FuncCall(call.clone()),
+            TableTypes::Reasingment(r) if r.ptr == Some(PointerType::Pointer) => Value::Deref(r.name.clone()),
+            TableTypes::Reasingment(r) if r.ptr == Some(PointerType::Reference) && r.name != "self" => Value::Ref(r.name.clone()),
+            TableTypes::Reasingment(r) => {
+                if let Some(idx) = &r.array_index {
+                    Value::Index(r.name.clone(), idx.clone())
+                } else {
+                    Value::Var(r.name.clone())
+                }
+            }
+            TableTypes::Variable(v) => {
+                if let Some(val) = v.value.as_ref().and_then(|v| v.first()) {
+                    val.clone()
+                } else if let Some(name) = &v.name {
+                    if let Some((arr_name, idx_str)) = crate::variable_types::parse_array_syntax(name) {
+                        Value::Index(arr_name, idx_str)
+                    } else {
+                        Value::Var(name.clone())
+                    }
+                } else {
+                    Value::Var(String::new())
+                }
+            }
+            _ => {
+                let op = Self::extract_operand(e);
+                if let Some((arr_name, idx_str)) = crate::variable_types::parse_array_syntax(&op) {
+                    Value::Index(arr_name, idx_str)
+                } else {
+                    Value::Var(op)
+                }
+            }
+        }
+    }
 }
 
 pub fn generate_three_address_code(type_table: Vec<TableTypes>, debug: bool) -> Vec<Tac> {
@@ -285,4 +321,3 @@ pub fn generate_three_address_code(type_table: Vec<TableTypes>, debug: bool) -> 
 
     generator.tac_table
 }
-

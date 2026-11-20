@@ -18,7 +18,7 @@ impl ThreeAddressCodeGenerator {
         }
     }
 
-    pub(crate) fn add_conditional_chain(&mut self, chain: Vec<Conditional>) {
+    pub(super) fn add_conditional_chain(&mut self, chain: Vec<Conditional>) {
         if chain.is_empty() {
             return;
         }
@@ -82,7 +82,7 @@ impl ThreeAddressCodeGenerator {
         }
     }
 
-    pub(crate) fn add_conditional_block(&mut self, start: Type, end: Type, condition: Vec<TableTypes>, table: Vec<TableTypes>) {
+    pub(super) fn add_conditional_block(&mut self, start: Type, end: Type, condition: Vec<TableTypes>, table: Vec<TableTypes>) {
         let label = self.next_label();
 
         if start == Type::Loop {
