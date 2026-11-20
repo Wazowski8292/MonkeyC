@@ -1,6 +1,6 @@
 use crate::enbeded_funcs::FUNCTIONS;
 use crate::semantic_analyzer::TokenType;
-use crate::three_address_code_gen::{Operator, Tac, Type};
+use crate::three_address_code::{Operator, Tac, Type};
 use std::collections::HashMap;
 use std::vec::Vec;
 

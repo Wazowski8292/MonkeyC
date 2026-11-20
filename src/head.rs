@@ -5,7 +5,7 @@ use crate::error_handler;
 use crate::head::import::{FileLoader, FileHeader};
 use crate::parser::parse_text;
 use crate::semantic_analyzer::{analyze_semantically, finish_pending_checks};
-use crate::three_address_code_gen::generate_three_address_code;
+use crate::three_address_code::generate_three_address_code;
 use crate::write_asm::write_asm;
 
 use Vec;
